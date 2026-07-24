@@ -39,7 +39,7 @@ data class AgentStat(
 
 @Serializable
 data class ActivityItem(
-    val id: String = "",
+    val id: String? = null,
     val agent_name: String = "",
     val task_description: String = "",
     val status: String = "",
