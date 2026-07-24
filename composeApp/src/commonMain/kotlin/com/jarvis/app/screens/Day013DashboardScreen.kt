@@ -52,7 +52,7 @@ fun DashboardScreen(onBack: () -> Unit) {
             onRetry = { viewModel.loadData() },
             modifier = Modifier.padding(padding),
             loadingMessage = "Loading dashboard..."
-        ) { data ->
+        ) { data: SnapshotResponse ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -148,8 +148,8 @@ private fun VpsCard(vps: VpsData) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             ResourceBar("CPU", vps.cpu_pct, 100.0, "%")
-            ResourceBar("RAM", vps.mem_pct, 100.0, "${\"%.0f\".format(vps.mem_used_mb)} / ${\"%.0f\".format(vps.mem_total_mb)} MB")
-            ResourceBar("Disk", vps.disk_pct, 100.0, "${\"%.1f\".format(vps.disk_used_gb)} / ${\"%.1f\".format(vps.disk_total_gb)} GB")
+            ResourceBar("RAM", vps.mem_pct, 100.0, "${"%.0f".format(vps.mem_used_mb)} / ${"%.0f".format(vps.mem_total_mb)} MB")
+            ResourceBar("Disk", vps.disk_pct, 100.0, "${"%.1f".format(vps.disk_used_gb)} / ${"%.1f".format(vps.disk_total_gb)} GB")
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Uptime", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(formatUptime(vps.uptime_s), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
@@ -164,7 +164,7 @@ private fun ResourceBar(label: String, value: Double, max: Double, detail: Strin
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
             Text(
-                "${\"%.1f\".format(value)}%  $detail",
+                "${"%.1f".format(value)}%  $detail",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
