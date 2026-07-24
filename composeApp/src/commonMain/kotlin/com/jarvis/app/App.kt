@@ -15,6 +15,13 @@ fun App() {
             is Screen.Home -> HomeScreen(
                 onNavigate = { screen -> currentScreen = screen }
             )
+            is Screen.AppList -> AppListScreen(
+                onBack = { currentScreen = Screen.Home },
+                onNavigate = { screen -> currentScreen = screen }
+            )
+            is Screen.Dashboard -> DashboardScreen(
+                onBack = { currentScreen = Screen.Home }
+            )
             is Screen.DailyCommits -> DailyCommitsScreen(
                 onBack = { currentScreen = Screen.Home }
             )
@@ -70,9 +77,6 @@ fun App() {
                 onBack = { currentScreen = Screen.Home }
             )
             is Screen.Timer -> TimerScreen(
-                onBack = { currentScreen = Screen.Home }
-            )
-            is Screen.Dashboard -> DashboardScreen(
                 onBack = { currentScreen = Screen.Home }
             )
             is Screen.Habit -> HabitScreen(

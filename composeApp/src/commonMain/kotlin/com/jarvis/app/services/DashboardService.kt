@@ -1,27 +1,31 @@
 package com.jarvis.app.services
 
+import com.jarvis.app.models.SnapshotResponse
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
-import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 
 class DashboardService(
-    private val baseUrl: String = "http://10.0.2.2:3000"
+    private val baseUrl: String = "http://dashboard.alisuhari.top"
 ) {
     private val client = HttpClient {
         install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true })
+            json(Json {
+                ignoreUnknownKeys = true
+                isLenient = true
+            })
         }
     }
 
-    suspend fun fetchDashboardData(): String {
+    suspend fun fetchSnapshot(): Result<SnapshotResponse> {
         return try {
-            client.get("$baseUrl/api/dashboard").body()
+            val response: SnapshotResponse = client.get("$baseUrl/api/snapshot").body()
+            Result.success(response)
         } catch (e: Exception) {
-            "{\"error\": \"${e.message}\"}"
+            Result.failure(e)
         }
     }
 

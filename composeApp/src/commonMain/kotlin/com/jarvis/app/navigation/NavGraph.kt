@@ -3,6 +3,8 @@ package com.jarvis.app.navigation
 // Simple sealed class navigation without external dependencies
 sealed class Screen(val route: String) {
     data object Home : Screen("home")
+    data object AppList : Screen("app_list")
+    data object Dashboard : Screen("day_013_dashboard")
     data object DailyCommits : Screen("daily_commits")
     data object Welcome : Screen("day_001_welcome")
     data object Counter : Screen("day_002_counter")
@@ -20,7 +22,6 @@ sealed class Screen(val route: String) {
     data object ExpenseList : Screen("day_010_expense_list")
     data object Flashcard : Screen("day_011_flashcard")
     data object Timer : Screen("day_012_timer")
-    data object Dashboard : Screen("day_013_dashboard")
     data object Habit : Screen("day_014_habit")
     data object Notes : Screen("day_015_notes")
 }
