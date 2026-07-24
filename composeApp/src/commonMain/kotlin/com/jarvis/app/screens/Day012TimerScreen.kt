@@ -119,7 +119,7 @@ fun TimerScreen(onBack: () -> Unit) {
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                FilledButton(
+                Button(
                     onClick = {
                         isRunning = if (timerMode == "countdown" && timeInMillis <= 0) {
                             timeInMillis = countdownTime

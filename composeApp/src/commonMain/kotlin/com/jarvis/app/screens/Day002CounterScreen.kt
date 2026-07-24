@@ -46,7 +46,7 @@ fun CounterScreen(onBack: () -> Unit) {
                 ) {
                     Text("-", style = MaterialTheme.typography.headlineLarge)
                 }
-                FilledButton(
+                Button(
                     onClick = { count++ },
                     modifier = Modifier.size(64.dp)
                 ) {

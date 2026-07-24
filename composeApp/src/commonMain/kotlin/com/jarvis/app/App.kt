@@ -49,7 +49,7 @@ fun App() {
                 onBack = { currentScreen = Screen.Home },
                 onNavigateToDetail = { id ->
                     selectedExpenseId = id
-                    currentScreen = Screen.ExpenseDetail.createRoute(id)
+                    currentScreen = Screen.ExpenseDetail
                 }
             )
             is Screen.ExpenseDetail -> {
@@ -63,7 +63,7 @@ fun App() {
                 onBack = { currentScreen = Screen.Home },
                 onNavigateToDetail = { id ->
                     selectedExpenseId = id
-                    currentScreen = Screen.ExpenseDetail.createRoute(id)
+                    currentScreen = Screen.ExpenseDetail
                 }
             )
             is Screen.Flashcard -> FlashcardScreen(
