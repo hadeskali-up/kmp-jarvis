@@ -13,25 +13,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jarvis.app.core.UiState
+import com.jarvis.app.core.fold
 import com.jarvis.app.models.DeepSeekData
 import com.jarvis.app.navigation.Screen
 import com.jarvis.app.services.DashboardService
+import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(onNavigate: (Screen) -> Unit) {
-    var deepseekData by remember { mutableStateOf<DeepSeekData?>(null) }
-    val service = remember { DashboardService() }
+    var creditState by remember { mutableStateOf<UiState<DeepSeekData>>(UiState.Loading) }
+    val service: DashboardService = koinInject()
 
     LaunchedEffect(Unit) {
         service.fetchSnapshot().fold(
-            onSuccess = { deepseekData = it.deepseek },
-            onFailure = { /* silently use null — banner just hides */ }
+            onSuccess = { creditState = it.deepseek?.let { ds -> UiState.Success(ds) } ?: UiState.Error("No data") },
+            onFailure = { creditState = UiState.Error(it.message ?: "Failed") }
         )
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { service.cleanup() }
     }
 
     Scaffold(
@@ -45,8 +44,8 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // ── DeepSeek Credit Banner ──
-            DeepSeekBanner(deepseekData)
+            // ── DeepSeek Credit Banner (powered by UiState) ──
+            DeepSeekBanner(creditState)
 
             Spacer(Modifier.height(48.dp))
 
@@ -72,9 +71,9 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
     }
 }
 
-// ── DeepSeek Credit Banner ──
+// ── DeepSeek Credit Banner (UiState-driven) ──
 @Composable
-private fun DeepSeekBanner(data: DeepSeekData?) {
+private fun DeepSeekBanner(state: UiState<DeepSeekData>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -102,40 +101,53 @@ private fun DeepSeekBanner(data: DeepSeekData?) {
                 textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(4.dp))
-            if (data != null) {
-                Text(
-                    data.display.ifEmpty { "${data.total_balance} ${data.currency}" },
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        Icons.Default.TrendingDown,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
-                    )
+
+            state.fold(
+                onLoading = {
                     Text(
-                        "Today: \$${data.today_used}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        "Loading...",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                onSuccess = { data ->
+                    Text(
+                        data.display.ifEmpty { "${data.total_balance} ${data.currency}" },
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.TrendingDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            "Today: \$${data.today_used}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                    }
+                },
+                onError = { msg ->
+                    Text(
+                        "—",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f),
+                        textAlign = TextAlign.Center
                     )
                 }
-            } else {
-                Text(
-                    "Loading...",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
-                    textAlign = TextAlign.Center
-                )
-            }
+            )
         }
     }
 }

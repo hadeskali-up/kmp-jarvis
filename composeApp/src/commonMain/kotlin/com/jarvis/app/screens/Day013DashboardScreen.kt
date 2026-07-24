@@ -16,36 +16,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.jarvis.app.core.ScreenState
 import com.jarvis.app.models.*
-import com.jarvis.app.services.DashboardService
-import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(onBack: () -> Unit) {
-    var snapshot by remember { mutableStateOf<SnapshotResponse?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-    val service = remember { DashboardService() }
-
-    fun loadData() {
-        scope.launch {
-            isLoading = true
-            error = null
-            service.fetchSnapshot().fold(
-                onSuccess = { snapshot = it },
-                onFailure = { error = it.message }
-            )
-            isLoading = false
-        }
-    }
-
-    LaunchedEffect(Unit) { loadData() }
-
-    DisposableEffect(Unit) {
-        onDispose { service.cleanup() }
-    }
+    val viewModel: DashboardViewModel = koinInject()
+    val uiState by viewModel.state.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -57,7 +37,7 @@ fun DashboardScreen(onBack: () -> Unit) {
                     }
                 },
                 actions = {
-                    IconButton(onClick = { loadData() }) {
+                    IconButton(onClick = { viewModel.loadData() }) {
                         Icon(Icons.Default.Refresh, "Refresh")
                     }
                 },
@@ -67,105 +47,68 @@ fun DashboardScreen(onBack: () -> Unit) {
             )
         }
     ) { padding ->
-        when {
-            isLoading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(padding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(12.dp))
-                        Text("Loading dashboard...", style = MaterialTheme.typography.bodyMedium)
-                    }
+        ScreenState(
+            state = uiState,
+            onRetry = { viewModel.loadData() },
+            modifier = Modifier.padding(padding),
+            loadingMessage = "Loading dashboard..."
+        ) { data ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // ── DeepSeek Credits ──
+                data.deepseek?.let { ds ->
+                    SectionHeader("DeepSeek Credits", Icons.Default.CurrencyExchange)
+                    CreditCard(ds)
                 }
-            }
-            error != null -> {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(padding),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.CloudOff,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text("Connection failed", fontWeight = FontWeight.Bold)
-                        Text(
-                            error ?: "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Button(onClick = { loadData() }) {
-                            Text("Retry")
-                        }
-                    }
+
+                // ── VPS Resources ──
+                data.vps?.let { vps ->
+                    SectionHeader("VPS Resources", Icons.Default.Memory)
+                    VpsCard(vps)
                 }
-            }
-            else -> {
-                val data = snapshot
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // ── DeepSeek Credits ──
-                    data?.deepseek?.let { ds ->
-                        SectionHeader("DeepSeek Credits", Icons.Default.CurrencyExchange)
-                        CreditCard(ds)
-                    }
 
-                    // ── VPS Resources ──
-                    data?.vps?.let { vps ->
-                        SectionHeader("VPS Resources", Icons.Default.Memory)
-                        VpsCard(vps)
-                    }
-
-                    // ── Gateway Status ──
-                    data?.gateway?.let { gw ->
-                        SectionHeader("Gateway", Icons.Default.Router)
-                        GatewayCard(gw)
-                    }
-
-                    // ── Agent Stats ──
-                    data?.agents?.let { agents ->
-                        SectionHeader("Agents", Icons.Default.People)
-                        AgentStatsGrid(agents)
-                    }
-
-                    // ── Overall Stats ──
-                    data?.stats?.let { st ->
-                        SectionHeader("Task Stats", Icons.Default.Assessment)
-                        StatsRow(st)
-                    }
-
-                    // ── Page Hits ──
-                    data?.page_hits?.let { ph ->
-                        SectionHeader("Page Hits", Icons.Default.Visibility)
-                        PageHitsCard(ph)
-                    }
-
-                    // ── Recent Activity ──
-                    data?.activity?.let { acts ->
-                        SectionHeader("Recent Activity", Icons.Default.Timeline)
-                        ActivityFeed(acts.take(10))
-                    }
-
-                    // ── Activity by Day ──
-                    data?.activity_by_day?.let { days ->
-                        SectionHeader("Activity by Day", Icons.Default.BarChart)
-                        DayActivityBars(days)
-                    }
-
-                    Spacer(Modifier.height(32.dp))
+                // ── Gateway Status ──
+                data.gateway?.let { gw ->
+                    SectionHeader("Gateway", Icons.Default.Router)
+                    GatewayCard(gw)
                 }
+
+                // ── Agent Stats ──
+                data.agents?.let { agents ->
+                    SectionHeader("Agents", Icons.Default.People)
+                    AgentStatsGrid(agents)
+                }
+
+                // ── Overall Stats ──
+                data.stats?.let { st ->
+                    SectionHeader("Task Stats", Icons.Default.Assessment)
+                    StatsRow(st)
+                }
+
+                // ── Page Hits ──
+                data.page_hits?.let { ph ->
+                    SectionHeader("Page Hits", Icons.Default.Visibility)
+                    PageHitsCard(ph)
+                }
+
+                // ── Recent Activity ──
+                data.activity?.let { acts ->
+                    SectionHeader("Recent Activity", Icons.Default.Timeline)
+                    ActivityFeed(acts.take(10))
+                }
+
+                // ── Activity by Day ──
+                data.activity_by_day?.let { days ->
+                    SectionHeader("Activity by Day", Icons.Default.BarChart)
+                    DayActivityBars(days)
+                }
+
+                Spacer(Modifier.height(32.dp))
             }
         }
     }
@@ -205,8 +148,8 @@ private fun VpsCard(vps: VpsData) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             ResourceBar("CPU", vps.cpu_pct, 100.0, "%")
-            ResourceBar("RAM", vps.mem_pct, 100.0, "${"%.0f".format(vps.mem_used_mb)} / ${"%.0f".format(vps.mem_total_mb)} MB")
-            ResourceBar("Disk", vps.disk_pct, 100.0, "${"%.1f".format(vps.disk_used_gb)} / ${"%.1f".format(vps.disk_total_gb)} GB")
+            ResourceBar("RAM", vps.mem_pct, 100.0, "${\"%.0f\".format(vps.mem_used_mb)} / ${\"%.0f\".format(vps.mem_total_mb)} MB")
+            ResourceBar("Disk", vps.disk_pct, 100.0, "${\"%.1f\".format(vps.disk_used_gb)} / ${\"%.1f\".format(vps.disk_total_gb)} GB")
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Uptime", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(formatUptime(vps.uptime_s), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
@@ -221,7 +164,7 @@ private fun ResourceBar(label: String, value: Double, max: Double, detail: Strin
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
             Text(
-                "${"%.1f".format(value)}%  $detail",
+                "${\"%.1f\".format(value)}%  $detail",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
