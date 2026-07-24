@@ -30,7 +30,7 @@ fun <T> ScreenState(
     when (state) {
         is UiState.Loading -> LoadingContent(modifier, loadingMessage)
         is UiState.Error -> ErrorContent(modifier, state.message, onRetry)
-        is UiState.Success -> content(state.data)
+        is UiState.Success -> Box(modifier = modifier) { content(state.data) }
     }
 }
 
