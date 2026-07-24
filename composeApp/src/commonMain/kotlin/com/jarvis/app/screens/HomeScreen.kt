@@ -19,7 +19,6 @@ data class FeatureTile(
     val title: String,
     val icon: ImageVector,
     val screen: Screen,
-    val color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary
 )
 
 private val features = listOf(
