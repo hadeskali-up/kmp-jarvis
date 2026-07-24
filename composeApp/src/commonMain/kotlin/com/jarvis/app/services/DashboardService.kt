@@ -9,7 +9,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 
 class DashboardService(
-    private val baseUrl: String = "http://dashboard.alisuhari.top"
+    private val baseUrl: String = "https://dashboard.alisuhari.top"
 ) {
     private val client = HttpClient {
         install(ContentNegotiation) {

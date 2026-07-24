@@ -51,10 +51,10 @@ private val DarkColors = darkColorScheme(
 
 @Composable
 fun JarvisTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = false,  // Force light — white bg always
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColors else LightColors
+    val colorScheme = LightColors  // Always white background
 
     MaterialTheme(
         colorScheme = colorScheme,
