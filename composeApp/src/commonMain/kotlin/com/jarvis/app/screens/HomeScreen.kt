@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -15,10 +16,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jarvis.app.core.UiState
 import com.jarvis.app.core.fold
+import com.jarvis.app.models.CryptoPositionsResponse
 import com.jarvis.app.models.DeepSeekData
 import com.jarvis.app.models.RootsysUsageData
 import com.jarvis.app.navigation.Screen
+import com.jarvis.app.services.CryptoService
 import com.jarvis.app.services.DashboardService
+import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -26,7 +30,9 @@ import org.koin.compose.koinInject
 fun HomeScreen(onNavigate: (Screen) -> Unit) {
     var creditState by remember { mutableStateOf<UiState<DeepSeekData>>(UiState.Loading) }
     var rootsysState by remember { mutableStateOf<UiState<RootsysUsageData>>(UiState.Loading) }
+    var cryptoState by remember { mutableStateOf<UiState<CryptoPositionsResponse>>(UiState.Loading) }
     val service: DashboardService = koinInject()
+    val cryptoService: CryptoService = koinInject()
 
     LaunchedEffect(Unit) {
         service.fetchSnapshot().fold(
@@ -41,6 +47,17 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
         )
     }
 
+    // Auto-refresh crypto positions every 30s
+    LaunchedEffect(Unit) {
+        while (true) {
+            cryptoService.fetchPositions().fold(
+                onSuccess = { cryptoState = UiState.Success(it) },
+                onFailure = { cryptoState = UiState.Error(it.message ?: "Failed") }
+            )
+            delay(30_000)
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
@@ -52,7 +69,14 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // ── DeepSeek Credit Banner (powered by UiState) ──
+            // ── Crypto PnL Banner (top) ──
+            CryptoPnlBanner(cryptoState) {
+                onNavigate(Screen.Crypto)
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── DeepSeek Credit Banner ──
             DeepSeekBanner(creditState)
 
             Spacer(Modifier.height(16.dp))
@@ -80,6 +104,85 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+    }
+}
+
+// ── Crypto PnL Banner ──
+@Composable
+private fun CryptoPnlBanner(state: UiState<CryptoPositionsResponse>, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                Icons.Default.CurrencyBitcoin,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Crypto PnL",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(4.dp))
+
+            state.fold(
+                onLoading = {
+                    Text(
+                        "Loading...",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.5f),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                onSuccess = { data ->
+                    val totalPnl = data.positions.sumOf { it.pnl_usd }
+                    val totalValue = data.positions.sumOf { it.market_value }
+                    val winners = data.positions.count { it.isProfitable }
+                    val losers = data.positions.count { !it.isProfitable }
+                    val pnlColor = if (totalPnl >= 0) Color(0xFF4CAF50) else Color(0xFFEF5350)
+                    val pnlSign = if (totalPnl >= 0) "+" else ""
+
+                    Text(
+                        "$pnlSign$${"%,.2f".format(totalPnl)}",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = pnlColor,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "$${"%,.2f".format(totalValue)} total  •  ${data.count} open  •  $winners W / $losers L",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                onError = { msg ->
+                    Text(
+                        "—",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.3f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            )
         }
     }
 }

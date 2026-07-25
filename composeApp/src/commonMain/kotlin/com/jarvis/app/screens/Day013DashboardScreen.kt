@@ -12,13 +12,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jarvis.app.core.ScreenState
+import com.jarvis.app.core.UiState
+import com.jarvis.app.core.fold
 import com.jarvis.app.models.*
+import com.jarvis.app.services.CryptoService
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -26,6 +32,21 @@ import org.koin.compose.koinInject
 fun DashboardScreen(onBack: () -> Unit) {
     val viewModel: DashboardViewModel = koinInject()
     val uiState by viewModel.state.collectAsStateWithLifecycle()
+    val cryptoService: CryptoService = koinInject()
+    var cryptoState by remember { mutableStateOf<UiState<CryptoPositionsResponse>>(UiState.Loading) }
+    val scope = rememberCoroutineScope()
+
+    // Fetch crypto positions alongside dashboard data
+    fun loadCrypto() {
+        scope.launch {
+            cryptoService.fetchPositions().fold(
+                onSuccess = { cryptoState = UiState.Success(it) },
+                onFailure = { cryptoState = UiState.Error(it.message ?: "Failed to fetch crypto") }
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) { loadCrypto() }
 
     Scaffold(
         topBar = {
@@ -37,7 +58,10 @@ fun DashboardScreen(onBack: () -> Unit) {
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.loadData() }) {
+                    IconButton(onClick = {
+                        viewModel.loadData()
+                        loadCrypto()
+                    }) {
                         Icon(Icons.Default.Refresh, "Refresh")
                     }
                 },
@@ -65,6 +89,9 @@ fun DashboardScreen(onBack: () -> Unit) {
                     SectionHeader("DeepSeek Credits", Icons.Default.CurrencyExchange)
                     CreditCard(ds)
                 }
+
+                // ── Crypto Holdings ──
+                CryptoHoldingsSection(cryptoState)
 
                 // ── VPS Resources ──
                 data.vps?.let { vps ->
@@ -376,6 +403,198 @@ private fun DayActivityBars(days: List<DayActivity>) {
                     )
                 }
             }
+        }
+    }
+}
+
+// ── Crypto Holdings Section ──
+@Composable
+private fun CryptoHoldingsSection(state: UiState<CryptoPositionsResponse>) {
+    SectionHeader("Crypto Holdings", Icons.Default.CurrencyBitcoin)
+
+    state.fold(
+        onLoading = {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    Modifier.fillMaxWidth().padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        },
+        onSuccess = { data ->
+            val totalValue = data.positions.sumOf { it.market_value }
+            val totalPnl = data.positions.sumOf { it.pnl_usd }
+            val totalCost = totalValue - totalPnl
+            val pnlPct = if (totalCost > 0) (totalPnl / totalCost) * 100 else 0.0
+            val pnlColor = if (totalPnl >= 0) Color(0xFF4CAF50) else Color(0xFFEF5350)
+            val pnlSign = if (totalPnl >= 0) "+" else ""
+            val winners = data.positions.count { it.isProfitable }
+            val losers = data.positions.count { !it.isProfitable }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Summary row
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                "Total Value",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "$${"%,.2f".format(totalValue)}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                "Total PnL",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "$pnlSign$${"%,.2f".format(totalPnl)} ($pnlSign${"%.1f".format(pnlPct)}%)",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = pnlColor
+                            )
+                        }
+                    }
+
+                    // W/L + open count badge
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CryptoMiniStat("Open", "${data.count}", Modifier.weight(1f))
+                        CryptoMiniStat("Winners", "$winners", Modifier.weight(1f), Color(0xFF4CAF50))
+                        CryptoMiniStat("Losers", "$losers", Modifier.weight(1f), Color(0xFFEF5350))
+                    }
+
+                    if (data.positions.isNotEmpty()) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+                        // Position list (max 5)
+                        data.positions.take(5).forEach { pos ->
+                            CryptoPositionRow(pos)
+                        }
+
+                        if (data.positions.size > 5) {
+                            Text(
+                                "+${data.positions.size - 5} more...",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        onError = { msg ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Default.CloudOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("Failed to load", fontWeight = FontWeight.Bold)
+                    Text(
+                        msg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun CryptoMiniStat(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.onSurface
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(value, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = color)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun CryptoPositionRow(pos: CryptoPosition) {
+    val pnlColor = if (pos.isProfitable) Color(0xFF4CAF50) else Color(0xFFEF5350)
+    val pnlSign = if (pos.pnl_usd >= 0) "+" else ""
+
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.CurrencyBitcoin,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                pos.symbol,
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "$${"%,.2f".format(pos.market_value)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "$pnlSign$${"%,.2f".format(pos.pnl_usd)}",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = pnlColor
+            )
+            Text(
+                "$pnlSign${"%.1f".format(pos.pnl_pct)}%",
+                style = MaterialTheme.typography.labelSmall,
+                color = pnlColor
+            )
         }
     }
 }
