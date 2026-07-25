@@ -36,6 +36,7 @@ private val apps = listOf(
     AppItem("Converter", Icons.Default.SwapHoriz, Screen.Converter, "Unit converter"),
     AppItem("Palette", Icons.Default.Palette, Screen.Palette, "Color palette tool"),
     AppItem("Crypto", Icons.Default.CurrencyBitcoin, Screen.Crypto, "Live crypto positions & PnL"),
+    AppItem("Forex", Icons.Default.CurrencyExchange, Screen.Forex, "Live forex positions & PnL"),
     AppItem("Quote", Icons.Default.FormatQuote, Screen.Quote, "Daily inspiration")
 )
 
