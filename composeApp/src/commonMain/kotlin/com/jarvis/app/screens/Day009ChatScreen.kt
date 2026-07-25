@@ -102,20 +102,24 @@ fun ChatScreen(onBack: () -> Unit) {
         },
         bottomBar = {
             Surface(
-                shadowElevation = 8.dp
+                shadowElevation = 8.dp,
+                modifier = Modifier
+                    .imePadding()
+                    .navigationBarsPadding()
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Bottom
                 ) {
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp, max = 120.dp),
                         placeholder = { Text("Type a message...") },
-                        singleLine = true,
                         enabled = !isLoading
                     )
                     Spacer(modifier = Modifier.width(8.dp))
