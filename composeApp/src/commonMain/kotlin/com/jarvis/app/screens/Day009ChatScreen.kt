@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.jarvis.app.models.ChatMessage
+import com.jarvis.app.models.ChatApiResponse
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -62,11 +63,12 @@ fun ChatScreen(onBack: () -> Unit) {
         scope.launch {
             try {
                 // Try connecting to Hermes bridge on port 8645
-                val response = client.post("http://10.0.2.2:8645/chat") {
+                val response = client.post("https://bridge.alisuhari.top/chat") {
                     contentType(ContentType.Application.Json)
                     setBody(mapOf("message" to text))
                 }
-                val reply = response.body<String>()
+                val apiResponse = response.body<ChatApiResponse>()
+                val reply = apiResponse.response.ifEmpty { "No response" }
                 val assistantMessage = ChatMessage(
                     id = (Clock.System.now().toEpochMilliseconds() + 1).toString(),
                     role = "assistant",

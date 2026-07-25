@@ -9,3 +9,9 @@ data class ChatMessage(
     val content: String,
     val timestamp: Long = 0L
 )
+
+@Serializable
+data class ChatApiResponse(
+    val response: String = "",
+    val used_model: String = ""
+)
