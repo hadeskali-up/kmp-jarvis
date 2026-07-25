@@ -26,8 +26,11 @@ import kotlinx.serialization.json.Json
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(onBack: () -> Unit) {
-    var messages by remember { mutableStateOf(listOf<ChatMessage>()) }
+fun ChatScreen(
+    onBack: () -> Unit,
+    messages: List<ChatMessage>,
+    onMessagesChange: (List<ChatMessage>) -> Unit
+) {
     var inputText by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
@@ -56,7 +59,7 @@ fun ChatScreen(onBack: () -> Unit) {
             role = "user",
             content = text
         )
-        messages = messages + userMessage
+        onMessagesChange(messages + userMessage)
         inputText = ""
         isLoading = true
 
@@ -74,7 +77,7 @@ fun ChatScreen(onBack: () -> Unit) {
                     role = "assistant",
                     content = reply
                 )
-                messages = messages + assistantMessage
+                onMessagesChange(messages + assistantMessage)
             } catch (e: Exception) {
                 // Fallback response
                 val fallbackMessage = ChatMessage(
@@ -84,7 +87,7 @@ fun ChatScreen(onBack: () -> Unit) {
                             "This feature connects to the Hermes AI backend on port 8645.\n\n" +
                             "You said: $text"
                 )
-                messages = messages + fallbackMessage
+                onMessagesChange(messages + fallbackMessage)
             } finally {
                 isLoading = false
             }

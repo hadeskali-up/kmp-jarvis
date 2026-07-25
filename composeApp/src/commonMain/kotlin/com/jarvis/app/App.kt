@@ -5,6 +5,7 @@ import com.jarvis.app.theme.JarvisTheme
 import com.jarvis.app.navigation.Screen
 import com.jarvis.app.screens.*
 import com.jarvis.app.util.BackHandler
+import com.jarvis.app.models.ChatMessage
 
 @Composable
 fun App() {
@@ -12,6 +13,8 @@ fun App() {
         var currentScreen by remember { mutableStateOf<Screen>(Screen.Home) }
         var selectedExpenseId by remember { mutableStateOf<String?>(null) }
         val backStack = remember { mutableStateListOf<Screen>(Screen.Home) }
+        // Chat state hoisted to App level — survives back navigation
+        var chatMessages by remember { mutableStateOf(listOf<ChatMessage>()) }
 
         fun navigateTo(screen: Screen) {
             backStack.add(screen)
@@ -67,7 +70,9 @@ fun App() {
                 onBack = { goBack() }
             )
             is Screen.Chat -> ChatScreen(
-                onBack = { goBack() }
+                onBack = { goBack() },
+                messages = chatMessages,
+                onMessagesChange = { chatMessages = it }
             )
             is Screen.ExpenseCapture -> ExpenseCaptureScreen(
                 onBack = { goBack() },
