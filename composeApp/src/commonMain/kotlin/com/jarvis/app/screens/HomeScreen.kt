@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.sp
 import com.jarvis.app.core.UiState
 import com.jarvis.app.core.fold
 import com.jarvis.app.models.DeepSeekData
+import com.jarvis.app.models.RootsysUsageData
 import com.jarvis.app.navigation.Screen
 import com.jarvis.app.services.DashboardService
 import org.koin.compose.koinInject
@@ -24,12 +25,19 @@ import org.koin.compose.koinInject
 @Composable
 fun HomeScreen(onNavigate: (Screen) -> Unit) {
     var creditState by remember { mutableStateOf<UiState<DeepSeekData>>(UiState.Loading) }
+    var rootsysState by remember { mutableStateOf<UiState<RootsysUsageData>>(UiState.Loading) }
     val service: DashboardService = koinInject()
 
     LaunchedEffect(Unit) {
         service.fetchSnapshot().fold(
-            onSuccess = { creditState = it.deepseek?.let { ds -> UiState.Success(ds) } ?: UiState.Error("No data") },
-            onFailure = { creditState = UiState.Error(it.message ?: "Failed") }
+            onSuccess = {
+                creditState = it.deepseek?.let { ds -> UiState.Success(ds) } ?: UiState.Error("No data")
+                rootsysState = it.rootsys?.let { rs -> UiState.Success(rs) } ?: UiState.Error("No data")
+            },
+            onFailure = {
+                creditState = UiState.Error(it.message ?: "Failed")
+                rootsysState = UiState.Error(it.message ?: "Failed")
+            }
         )
     }
 
@@ -47,7 +55,12 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
             // ── DeepSeek Credit Banner (powered by UiState) ──
             DeepSeekBanner(creditState)
 
-            Spacer(Modifier.height(48.dp))
+            Spacer(Modifier.height(16.dp))
+
+            // ── Rootsys Token Usage Banner ──
+            RootsysUsageBanner(rootsysState)
+
+            Spacer(Modifier.height(32.dp))
 
             // ── Two Main Icons ──
             Row(
@@ -150,6 +163,92 @@ private fun DeepSeekBanner(state: UiState<DeepSeekData>) {
             )
         }
     }
+}
+
+// ── Rootsys Token Usage Banner ──
+@Composable
+private fun RootsysUsageBanner(state: UiState<RootsysUsageData>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                Icons.Default.Bolt,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Rootsys Token Usage",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(4.dp))
+
+            state.fold(
+                onLoading = {
+                    Text(
+                        "Loading...",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                onSuccess = { data ->
+                    Text(
+                        formatTokens(data.today_total),
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "today  •  in ${formatTokens(data.today_input)} / out ${formatTokens(data.today_output)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "All-time: ${formatTokens(data.total_tokens)} across ${data.sessions_total} sessions",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                onError = { msg ->
+                    Text(
+                        "—",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.3f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            )
+        }
+    }
+}
+
+// ── Token formatter (e.g. 1.2M, 345K) ──
+private fun formatTokens(n: Long): String = when {
+    n >= 1_000_000_000 -> "%.1fB".format(n / 1_000_000_000.0)
+    n >= 1_000_000 -> "%.1fM".format(n / 1_000_000.0)
+    n >= 1_000 -> "%.1fK".format(n / 1_000.0)
+    else -> n.toString()
 }
 
 // ── Home Tile ──

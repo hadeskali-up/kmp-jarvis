@@ -12,6 +12,7 @@ data class SnapshotResponse(
     val gateway: GatewayData? = null,
     val stats: StatsData? = null,
     val deepseek: DeepSeekData? = null,
+    val rootsys: RootsysUsageData? = null,
     val page_hits: PageHitsData? = null
 )
 
@@ -97,4 +98,20 @@ data class PageHitsData(
     val today: Int = 0,
     val last_date: String = "",
     val daily: Map<String, Int> = emptyMap()
+)
+
+@Serializable
+data class RootsysUsageData(
+    val configured: Boolean = false,
+    val sessions_total: Int = 0,
+    val input_tokens: Long = 0,
+    val output_tokens: Long = 0,
+    val cache_read_tokens: Long = 0,
+    val reasoning_tokens: Long = 0,
+    val total_tokens: Long = 0,
+    val today_input: Long = 0,
+    val today_output: Long = 0,
+    val today_sessions: Int = 0,
+    val today_total: Long = 0,
+    val daily: Map<String, Long> = emptyMap()
 )
