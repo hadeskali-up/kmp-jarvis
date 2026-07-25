@@ -59,6 +59,12 @@ kotlin {
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.ktor.client.okhttp)
             implementation(libs.androidx.activity.compose)
+
+            // Widget + background refresh
+            implementation(libs.androidx.glance.appwidget)
+            implementation(libs.androidx.glance.material3)
+            implementation(libs.androidx.work.runtime)
+            implementation(libs.androidx.datastore.preferences)
         }
 
         iosMain.dependencies {
