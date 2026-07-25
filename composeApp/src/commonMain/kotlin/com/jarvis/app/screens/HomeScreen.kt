@@ -18,10 +18,11 @@ import com.jarvis.app.core.UiState
 import com.jarvis.app.core.fold
 import com.jarvis.app.models.CryptoPositionsResponse
 import com.jarvis.app.models.DeepSeekData
-import com.jarvis.app.models.RootsysUsageData
+import com.jarvis.app.models.ForexPositionsResponse
 import com.jarvis.app.navigation.Screen
 import com.jarvis.app.services.CryptoService
 import com.jarvis.app.services.DashboardService
+import com.jarvis.app.services.ForexService
 import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
 
@@ -29,20 +30,19 @@ import org.koin.compose.koinInject
 @Composable
 fun HomeScreen(onNavigate: (Screen) -> Unit) {
     var creditState by remember { mutableStateOf<UiState<DeepSeekData>>(UiState.Loading) }
-    var rootsysState by remember { mutableStateOf<UiState<RootsysUsageData>>(UiState.Loading) }
     var cryptoState by remember { mutableStateOf<UiState<CryptoPositionsResponse>>(UiState.Loading) }
+    var forexState by remember { mutableStateOf<UiState<ForexPositionsResponse>>(UiState.Loading) }
     val service: DashboardService = koinInject()
     val cryptoService: CryptoService = koinInject()
+    val forexService: ForexService = koinInject()
 
     LaunchedEffect(Unit) {
         service.fetchSnapshot().fold(
             onSuccess = {
                 creditState = it.deepseek?.let { ds -> UiState.Success(ds) } ?: UiState.Error("No data")
-                rootsysState = it.rootsys?.let { rs -> UiState.Success(rs) } ?: UiState.Error("No data")
             },
             onFailure = {
                 creditState = UiState.Error(it.message ?: "Failed")
-                rootsysState = UiState.Error(it.message ?: "Failed")
             }
         )
     }
@@ -53,6 +53,17 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
             cryptoService.fetchPositions().fold(
                 onSuccess = { cryptoState = UiState.Success(it) },
                 onFailure = { cryptoState = UiState.Error(it.message ?: "Failed") }
+            )
+            delay(30_000)
+        }
+    }
+
+    // Auto-refresh forex positions every 30s
+    LaunchedEffect(Unit) {
+        while (true) {
+            forexService.fetchPositions().fold(
+                onSuccess = { forexState = UiState.Success(it) },
+                onFailure = { forexState = UiState.Error(it.message ?: "Failed") }
             )
             delay(30_000)
         }
@@ -69,7 +80,14 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // ── Crypto PnL Banner (top) ──
+            // ── Forex PnL Banner (top) ──
+            ForexPnlBanner(forexState) {
+                onNavigate(Screen.Forex)
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── Crypto PnL Banner ──
             CryptoPnlBanner(cryptoState) {
                 onNavigate(Screen.Crypto)
             }
@@ -78,11 +96,6 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
 
             // ── DeepSeek Credit Banner ──
             DeepSeekBanner(creditState)
-
-            Spacer(Modifier.height(16.dp))
-
-            // ── Rootsys Token Usage Banner ──
-            RootsysUsageBanner(rootsysState)
 
             Spacer(Modifier.height(32.dp))
 
@@ -268,10 +281,11 @@ private fun DeepSeekBanner(state: UiState<DeepSeekData>) {
     }
 }
 
-// ── Rootsys Token Usage Banner ──
+// ── Forex PnL Banner ──
 @Composable
-private fun RootsysUsageBanner(state: UiState<RootsysUsageData>) {
+private fun ForexPnlBanner(state: UiState<ForexPositionsResponse>, onClick: () -> Unit) {
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
@@ -285,14 +299,14 @@ private fun RootsysUsageBanner(state: UiState<RootsysUsageData>) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
-                Icons.Default.Bolt,
+                Icons.Default.CurrencyExchange,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.size(28.dp)
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Rootsys Token Usage",
+                "Forex PnL",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
@@ -310,25 +324,22 @@ private fun RootsysUsageBanner(state: UiState<RootsysUsageData>) {
                     )
                 },
                 onSuccess = { data ->
+                    val totalPnl = data.total_pnl
+                    val pnlColor = if (totalPnl >= 0) Color(0xFF4CAF50) else Color(0xFFEF5350)
+                    val pnlSign = if (totalPnl >= 0) "+" else ""
+
                     Text(
-                        formatTokens(data.today_total),
+                        "$pnlSign$${"%,.2f".format(totalPnl)}",
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        color = pnlColor,
                         textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "today  •  in ${formatTokens(data.today_input)} / out ${formatTokens(data.today_output)}",
+                        "${data.count} open positions",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        "All-time: ${formatTokens(data.total_tokens)} across ${data.sessions_total} sessions",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f),
                         textAlign = TextAlign.Center
                     )
                 },
@@ -344,14 +355,6 @@ private fun RootsysUsageBanner(state: UiState<RootsysUsageData>) {
             )
         }
     }
-}
-
-// ── Token formatter (e.g. 1.2M, 345K) ──
-private fun formatTokens(n: Long): String = when {
-    n >= 1_000_000_000 -> "%.1fB".format(n / 1_000_000_000.0)
-    n >= 1_000_000 -> "%.1fM".format(n / 1_000_000.0)
-    n >= 1_000 -> "%.1fK".format(n / 1_000.0)
-    else -> n.toString()
 }
 
 // ── Home Tile ──

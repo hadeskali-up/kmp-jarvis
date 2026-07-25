@@ -105,6 +105,9 @@ fun App() {
             is Screen.Crypto -> CryptoScreen(
                 onBack = { goBack() }
             )
+            is Screen.Forex -> ForexScreen(
+                onBack = { goBack() }
+            )
         }
     }
 }

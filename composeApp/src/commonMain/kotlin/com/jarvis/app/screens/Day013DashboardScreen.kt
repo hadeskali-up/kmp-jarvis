@@ -24,6 +24,7 @@ import com.jarvis.app.core.UiState
 import com.jarvis.app.core.fold
 import com.jarvis.app.models.*
 import com.jarvis.app.services.CryptoService
+import com.jarvis.app.services.TradeHistoryService
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -34,6 +35,8 @@ fun DashboardScreen(onBack: () -> Unit) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val cryptoService: CryptoService = koinInject()
     var cryptoState by remember { mutableStateOf<UiState<CryptoPositionsResponse>>(UiState.Loading) }
+    val tradeHistoryService: TradeHistoryService = koinInject()
+    var tradeHistoryState by remember { mutableStateOf<UiState<TradeHistoryResponse>>(UiState.Loading) }
     val scope = rememberCoroutineScope()
 
     // Fetch crypto positions alongside dashboard data
@@ -46,7 +49,19 @@ fun DashboardScreen(onBack: () -> Unit) {
         }
     }
 
-    LaunchedEffect(Unit) { loadCrypto() }
+    fun loadTradeHistory() {
+        scope.launch {
+            tradeHistoryService.fetchTradeHistory(50).fold(
+                onSuccess = { tradeHistoryState = UiState.Success(it) },
+                onFailure = { tradeHistoryState = UiState.Error(it.message ?: "Failed to fetch trades") }
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        loadCrypto()
+        loadTradeHistory()
+    }
 
     Scaffold(
         topBar = {
@@ -61,6 +76,7 @@ fun DashboardScreen(onBack: () -> Unit) {
                     IconButton(onClick = {
                         viewModel.loadData()
                         loadCrypto()
+                        loadTradeHistory()
                     }) {
                         Icon(Icons.Default.Refresh, "Refresh")
                     }
@@ -92,6 +108,9 @@ fun DashboardScreen(onBack: () -> Unit) {
 
                 // ── Crypto Holdings ──
                 CryptoHoldingsSection(cryptoState)
+
+                // ── Trade History (consolidated crypto + forex) ──
+                TradeHistorySection(tradeHistoryState)
 
                 // ── VPS Resources ──
                 data.vps?.let { vps ->
@@ -594,6 +613,166 @@ private fun CryptoPositionRow(pos: CryptoPosition) {
                 "$pnlSign${"%.1f".format(pos.pnl_pct)}%",
                 style = MaterialTheme.typography.labelSmall,
                 color = pnlColor
+            )
+        }
+    }
+}
+
+// ── Trade History Section ──
+@Composable
+private fun TradeHistorySection(state: UiState<TradeHistoryResponse>) {
+    SectionHeader("Trade History", Icons.Default.History)
+
+    state.fold(
+        onLoading = {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    Modifier.fillMaxWidth().padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        },
+        onSuccess = { data ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Summary row
+                    val winners = data.trades.count { it.isProfitable }
+                    val losers = data.trades.count { it.pnl_usd < 0 }
+                    val totalPnl = data.total_pnl
+                    val pnlColor = if (totalPnl >= 0) Color(0xFF4CAF50) else Color(0xFFEF5350)
+                    val pnlSign = if (totalPnl >= 0) "+" else ""
+
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                "Total PnL",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "$pnlSign$${"%,.2f".format(totalPnl)}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = pnlColor
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CryptoMiniStat("Trades", "${data.count}", Modifier.weight(1f))
+                            CryptoMiniStat("W", "$winners", Modifier.weight(1f), Color(0xFF4CAF50))
+                            CryptoMiniStat("L", "$losers", Modifier.weight(1f), Color(0xFFEF5350))
+                        }
+                    }
+
+                    if (data.trades.isNotEmpty()) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+                        // Last 20 trades
+                        data.trades.take(20).forEach { trade ->
+                            TradeHistoryRow(trade)
+                        }
+
+                        if (data.trades.size > 20) {
+                            Text(
+                                "+${data.trades.size - 20} more...",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        Text(
+                            "No trades yet",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        },
+        onError = { msg ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Default.CloudOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("Failed to load", fontWeight = FontWeight.Bold)
+                    Text(
+                        msg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun TradeHistoryRow(trade: TradeRecord) {
+    val pnlColor = if (trade.isProfitable) Color(0xFF4CAF50) else Color(0xFFEF5350)
+    val pnlSign = if (trade.pnl_usd >= 0) "+" else ""
+    val sourceColor = if (trade.isForex) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.tertiary
+    val sourceIcon = if (trade.isForex) Icons.Default.CurrencyExchange else Icons.Default.CurrencyBitcoin
+    val sourceLabel = if (trade.isForex) "FX" else "CR"
+
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(
+                sourceIcon,
+                contentDescription = null,
+                tint = sourceColor,
+                modifier = Modifier.size(16.dp)
+            )
+            Column {
+                Text(
+                    trade.symbol,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp
+                )
+                Text(
+                    "${trade.side} • ${trade.formattedDate}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                "$pnlSign$${"%,.2f".format(trade.pnl_usd)}",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = if (trade.pnl_usd != 0.0) pnlColor else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                trade.status,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
     }

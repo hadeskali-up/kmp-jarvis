@@ -4,6 +4,8 @@ import com.jarvis.app.screens.DashboardViewModel
 import com.jarvis.app.services.CryptoService
 import com.jarvis.app.services.DashboardService
 import com.jarvis.app.services.ExpenseDatabase
+import com.jarvis.app.services.ForexService
+import com.jarvis.app.services.TradeHistoryService
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
@@ -12,6 +14,8 @@ val appModule: Module = module {
     // Services
     single { DashboardService() }
     single { CryptoService() }
+    single { ForexService() }
+    single { TradeHistoryService() }
     single { ExpenseDatabase() }
 
     // ViewModels
