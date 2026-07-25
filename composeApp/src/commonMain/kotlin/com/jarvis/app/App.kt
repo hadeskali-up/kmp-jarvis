@@ -102,6 +102,9 @@ fun App() {
             is Screen.Notes -> NotesScreen(
                 onBack = { goBack() }
             )
+            is Screen.Crypto -> CryptoScreen(
+                onBack = { goBack() }
+            )
         }
     }
 }

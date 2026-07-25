@@ -24,4 +24,5 @@ sealed class Screen(val route: String) {
     data object Timer : Screen("day_012_timer")
     data object Habit : Screen("day_014_habit")
     data object Notes : Screen("day_015_notes")
+    data object Crypto : Screen("crypto_positions")
 }

@@ -35,6 +35,7 @@ private val apps = listOf(
     AppItem("Calculator", Icons.Default.Calculate, Screen.Calculator, "Basic calculator"),
     AppItem("Converter", Icons.Default.SwapHoriz, Screen.Converter, "Unit converter"),
     AppItem("Palette", Icons.Default.Palette, Screen.Palette, "Color palette tool"),
+    AppItem("Crypto", Icons.Default.CurrencyBitcoin, Screen.Crypto, "Live crypto positions & PnL"),
     AppItem("Quote", Icons.Default.FormatQuote, Screen.Quote, "Daily inspiration")
 )
 
