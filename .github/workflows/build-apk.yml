@@ -1,9 +1,12 @@
-name: Build KMP Jarvis APK + Upload to temp.sh
+name: Build KMP Jarvis APK + GitHub Release
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -33,33 +36,22 @@ jobs:
         with:
           name: kmp-jarvis-debug-apk
           path: composeApp/build/outputs/apk/debug/*.apk
-          retention-days: 7
+          retention-days: 30
 
-      - name: Upload APK to temp.sh
-        id: upload
+      - name: Rename APK for release
         run: |
-          APK_PATH=$(ls composeApp/build/outputs/apk/debug/*.apk 2>/dev/null | head -1)
-          echo "APK found at: $APK_PATH"
-          if [ -n "$APK_PATH" ]; then
-            echo "Uploading to temp.sh..."
-            RESPONSE=$(curl -s -F "file=@$APK_PATH" https://temp.sh/upload)
-            echo "temp.sh response: $RESPONSE"
-            echo "download_url=$RESPONSE" >> $GITHUB_OUTPUT
-          else
-            echo "No APK found at expected path"
-            # Try alternate paths
-            ALT_APK=$(find . -name "*.apk" -path "*/outputs/apk/*" 2>/dev/null | head -1)
-            echo "Trying alternate path: $ALT_APK"
-            if [ -n "$ALT_APK" ]; then
-              RESPONSE=$(curl -s -F "file=@$ALT_APK" https://temp.sh/upload)
-              echo "temp.sh response: $RESPONSE"
-              echo "download_url=$RESPONSE" >> $GITHUB_OUTPUT
-            fi
-          fi
+          APK_PATH=$(ls composeApp/build/outputs/apk/debug/*.apk | head -1)
+          cp "$APK_PATH" ./kmp-jarvis.apk
+          echo "APK prepared: $(ls -lh ./kmp-jarvis.apk)"
 
-      - name: Print Download URL
+      - name: Create / Update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "================================="
-          echo "📱 APK Download URL:"
-          echo "${{ steps.upload.outputs.download_url }}"
-          echo "================================="
+          TAG="build-$(date +'%Y%m%d-%H%M')"
+          gh release delete latest --yes 2>/dev/null || true
+          gh release create latest ./kmp-jarvis.apk \
+            --title "Jarvis — Latest Build" \
+            --notes "Built from commit ${{ github.sha }} on $(date +'%Y-%m-%d %H:%M UTC')" \
+            --prerelease
+          echo "Release URL: https://github.com/${{ github.repository }}/releases/tag/latest"
