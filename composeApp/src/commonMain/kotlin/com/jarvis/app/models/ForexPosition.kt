@@ -28,3 +28,16 @@ data class ForexPosition(
     val pnlColor: String get() = if (isProfitable) "green" else "red"
     val isLong: Boolean get() = direction.equals("BUY", ignoreCase = true)
 }
+
+@Serializable
+data class ForexAlertsResponse(val alerts: List<ForexAlert> = emptyList(), val count: Int = 0)
+
+@Serializable
+data class ForexAlert(
+    val event: String = "",
+    val title: String = "",
+    val message: String = "",
+    val pair: String = "",
+    val deal_id: String = "",
+    val timestamp: String = ""
+)

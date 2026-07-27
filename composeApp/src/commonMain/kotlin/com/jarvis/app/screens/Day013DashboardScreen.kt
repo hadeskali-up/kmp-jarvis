@@ -100,6 +100,12 @@ fun DashboardScreen(onBack: () -> Unit) {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // ── Server Status ──
+                data.vps?.let { vps ->
+                    SectionHeader("Server Status", Icons.Default.Memory)
+                    VpsCard(vps)
+                }
+
                 // ── DeepSeek Credits ──
                 data.deepseek?.let { ds ->
                     SectionHeader("DeepSeek Credits", Icons.Default.CurrencyExchange)
@@ -112,11 +118,6 @@ fun DashboardScreen(onBack: () -> Unit) {
                 // ── Trade History (consolidated crypto + forex) ──
                 TradeHistorySection(tradeHistoryState)
 
-                // ── VPS Resources ──
-                data.vps?.let { vps ->
-                    SectionHeader("VPS Resources", Icons.Default.Memory)
-                    VpsCard(vps)
-                }
 
                 // ── Gateway Status ──
                 data.gateway?.let { gw ->

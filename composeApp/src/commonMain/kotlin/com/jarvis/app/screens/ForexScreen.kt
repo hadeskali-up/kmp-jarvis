@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jarvis.app.core.UiState
 import com.jarvis.app.core.fold
+import com.jarvis.app.models.ForexAlert
+import com.jarvis.app.models.ForexAlertsResponse
 import com.jarvis.app.models.ForexPosition
 import com.jarvis.app.models.ForexPositionsResponse
 import com.jarvis.app.services.ForexService
@@ -31,6 +33,7 @@ import org.koin.compose.koinInject
 fun ForexScreen(onBack: () -> Unit) {
     val service: ForexService = koinInject()
     var state by remember { mutableStateOf<UiState<ForexPositionsResponse>>(UiState.Loading) }
+    var alertsState by remember { mutableStateOf<UiState<ForexAlertsResponse>>(UiState.Loading) }
     var autoRefresh by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
@@ -41,6 +44,10 @@ fun ForexScreen(onBack: () -> Unit) {
                 onSuccess = { state = UiState.Success(it) },
                 onFailure = { state = UiState.Error(it.message ?: "Failed to fetch positions") }
             )
+            service.fetchAlerts().fold(
+                onSuccess = { alertsState = UiState.Success(it) },
+                onFailure = { alertsState = UiState.Error(it.message ?: "Failed to fetch alerts") }
+            )
         }
     }
 
@@ -49,6 +56,10 @@ fun ForexScreen(onBack: () -> Unit) {
             service.fetchPositions().fold(
                 onSuccess = { state = UiState.Success(it) },
                 onFailure = { state = UiState.Error(it.message ?: "Failed") }
+            )
+            service.fetchAlerts().fold(
+                onSuccess = { alertsState = UiState.Success(it) },
+                onFailure = { alertsState = UiState.Error(it.message ?: "Failed to fetch alerts") }
             )
             delay(30_000)
         }
@@ -96,6 +107,7 @@ fun ForexScreen(onBack: () -> Unit) {
             onSuccess = { data ->
                 ForexContent(
                     data = data,
+                    alertsState = alertsState,
                     autoRefresh = autoRefresh,
                     modifier = Modifier.padding(padding)
                 )
@@ -131,6 +143,7 @@ fun ForexScreen(onBack: () -> Unit) {
 @Composable
 private fun ForexContent(
     data: ForexPositionsResponse,
+    alertsState: UiState<ForexAlertsResponse>,
     autoRefresh: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -148,51 +161,83 @@ private fun ForexContent(
             autoRefresh = autoRefresh
         )
 
-        if (data.positions.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.CurrencyExchange,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "No open positions",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Forex market may be closed (weekend)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(data.positions) { pos ->
-                    ForexPositionCard(pos)
-                }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (data.positions.isEmpty()) {
                 item {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "TP = +30 pips  |  SL = -20 pips  |  IG native SL/TP",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.Default.CurrencyExchange,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text("No open positions", style = MaterialTheme.typography.titleMedium)
+                    }
                 }
+            } else {
+                items(data.positions) { pos -> ForexPositionCard(pos) }
+            }
+            item { ForexAlertsSection(alertsState) }
+            item {
+                Text(
+                    "ATR-based SL/TP  |  IG native orders",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ForexAlertsSection(state: UiState<ForexAlertsResponse>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Monitor Alerts", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        state.fold(
+            onLoading = { LinearProgressIndicator(Modifier.fillMaxWidth()) },
+            onSuccess = { data ->
+                if (data.alerts.isEmpty()) {
+                    Text("No monitor alerts yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    data.alerts.take(20).forEach { alert -> ForexAlertRow(alert) }
+                }
+            },
+            onError = { message -> Text(message, color = MaterialTheme.colorScheme.error) }
+        )
+    }
+}
+
+@Composable
+private fun ForexAlertRow(alert: ForexAlert) {
+    val color = when (alert.event) {
+        "opened" -> Color(0xFF4CAF50)
+        "closed" -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.error
+    }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(Icons.Default.Notifications, null, tint = color)
+            Column(Modifier.weight(1f)) {
+                Text(alert.title, fontWeight = FontWeight.Bold)
+                Text(alert.message, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    alert.timestamp.replace("T", " ").take(19) + " UTC",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

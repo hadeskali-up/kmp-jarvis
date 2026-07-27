@@ -1,6 +1,7 @@
 package com.jarvis.app.services
 
 import com.jarvis.app.models.ForexPositionsResponse
+import com.jarvis.app.models.ForexAlertsResponse
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -28,6 +29,10 @@ class ForexService(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    suspend fun fetchAlerts(limit: Int = 50): Result<ForexAlertsResponse> = runCatching {
+        client.get("$baseUrl/api/forex-alerts?limit=$limit").body()
     }
 
     fun cleanup() {
