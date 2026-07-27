@@ -353,10 +353,17 @@ private fun DailyPnlBanner(state: UiState<TradeHistoryResponse>, onClick: () -> 
                 },
                 onError = { msg ->
                     Text(
-                        "—",
+                        "N/A",
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.3f),
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        msg.take(40),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f),
                         textAlign = TextAlign.Center
                     )
                 }

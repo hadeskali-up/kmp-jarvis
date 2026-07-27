@@ -91,7 +91,6 @@ fun DailyCommitsScreen(onBack: () -> Unit) {
                 "Day 008 - Weather",
                 "Day 009 - Chat",
                 "Day 010 - Expenses",
-                "Day 011 - Flashcards",
                 "Day 012 - Timer",
                 "Day 013 - Dashboard",
                 "Day 014 - Habits",
