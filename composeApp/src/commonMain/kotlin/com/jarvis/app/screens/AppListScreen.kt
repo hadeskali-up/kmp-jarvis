@@ -25,7 +25,6 @@ private data class AppItem(
 private val apps = listOf(
     AppItem("Chat", Icons.Default.Chat, Screen.Chat, "AI chat assistant"),
     AppItem("Expenses", Icons.Default.AccountBalanceWallet, Screen.ExpenseCapture, "Track and categorize spending"),
-    AppItem("Flashcards", Icons.Default.School, Screen.Flashcard, "Study with spaced repetition"),
     AppItem("Timer", Icons.Default.Timer, Screen.Timer, "Pomodoro & focus timer"),
     AppItem("Daily Commits", Icons.Default.DateRange, Screen.DailyCommits, "GitHub commit tracker"),
     AppItem("Notes", Icons.Default.Note, Screen.Notes, "Quick notes & memos"),

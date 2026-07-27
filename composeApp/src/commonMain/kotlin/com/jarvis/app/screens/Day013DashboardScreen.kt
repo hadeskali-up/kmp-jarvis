@@ -63,6 +63,14 @@ fun DashboardScreen(onBack: () -> Unit) {
         loadTradeHistory()
     }
 
+    // Auto-refresh trade history every 60s to reflect today's trades
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(60_000)
+            loadTradeHistory()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -100,7 +108,12 @@ fun DashboardScreen(onBack: () -> Unit) {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // ── Server Status ──
+                // ── CPU Usage (prominent, top) ──
+                data.vps?.let { vps ->
+                    CpuCard(vps)
+                }
+
+                // ── Server Status (RAM/Disk/Uptime) ──
                 data.vps?.let { vps ->
                     SectionHeader("Server Status", Icons.Default.Memory)
                     VpsCard(vps)
@@ -189,18 +202,72 @@ private fun CreditCard(ds: DeepSeekData) {
     }
 }
 
-// ── VPS Card ──
+// ── VPS Card (RAM/Disk/Uptime only — CPU is in CpuCard above) ──
 @Composable
 private fun VpsCard(vps: VpsData) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            ResourceBar("CPU", vps.cpu_pct, 100.0, "%")
             ResourceBar("RAM", vps.mem_pct, 100.0, "${"%.0f".format(vps.mem_used_mb)} / ${"%.0f".format(vps.mem_total_mb)} MB")
             ResourceBar("Disk", vps.disk_pct, 100.0, "${"%.1f".format(vps.disk_used_gb)} / ${"%.1f".format(vps.disk_total_gb)} GB")
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Uptime", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(formatUptime(vps.uptime_s), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
             }
+        }
+    }
+}
+
+// ── CPU Card (prominent, at top of dashboard) ──
+@Composable
+private fun CpuCard(vps: VpsData) {
+    val cpuColor = when {
+        vps.cpu_pct > 80 -> MaterialTheme.colorScheme.error
+        vps.cpu_pct > 60 -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.primary
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Memory,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "CPU Usage",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                Text(
+                    "${"%.1f".format(vps.cpu_pct)}%",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+            LinearProgressIndicator(
+                progress = { (vps.cpu_pct / 100.0).toFloat().coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                color = cpuColor,
+                trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f)
+            )
+            Text(
+                "Load: ${"%.2f".format(vps.cpu_load)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+            )
         }
     }
 }

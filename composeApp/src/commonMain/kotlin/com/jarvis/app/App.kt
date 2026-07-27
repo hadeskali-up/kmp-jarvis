@@ -95,9 +95,6 @@ fun App() {
                     navigateTo(Screen.ExpenseDetail)
                 }
             )
-            is Screen.Flashcard -> FlashcardScreen(
-                onBack = { goBack() }
-            )
             is Screen.Timer -> TimerScreen(
                 onBack = { goBack() }
             )

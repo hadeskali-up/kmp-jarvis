@@ -18,11 +18,11 @@ import com.jarvis.app.core.UiState
 import com.jarvis.app.core.fold
 import com.jarvis.app.models.CryptoPositionsResponse
 import com.jarvis.app.models.DeepSeekData
-import com.jarvis.app.models.ForexPositionsResponse
+import com.jarvis.app.models.TradeHistoryResponse
 import com.jarvis.app.navigation.Screen
 import com.jarvis.app.services.CryptoService
 import com.jarvis.app.services.DashboardService
-import com.jarvis.app.services.ForexService
+import com.jarvis.app.services.TradeHistoryService
 import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
 
@@ -31,10 +31,10 @@ import org.koin.compose.koinInject
 fun HomeScreen(onNavigate: (Screen) -> Unit) {
     var creditState by remember { mutableStateOf<UiState<DeepSeekData>>(UiState.Loading) }
     var cryptoState by remember { mutableStateOf<UiState<CryptoPositionsResponse>>(UiState.Loading) }
-    var forexState by remember { mutableStateOf<UiState<ForexPositionsResponse>>(UiState.Loading) }
+    var tradeHistoryState by remember { mutableStateOf<UiState<TradeHistoryResponse>>(UiState.Loading) }
     val service: DashboardService = koinInject()
     val cryptoService: CryptoService = koinInject()
-    val forexService: ForexService = koinInject()
+    val tradeHistoryService: TradeHistoryService = koinInject()
 
     LaunchedEffect(Unit) {
         service.fetchSnapshot().fold(
@@ -58,12 +58,12 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
-    // Auto-refresh forex positions every 30s
+    // Auto-refresh trade history every 30s
     LaunchedEffect(Unit) {
         while (true) {
-            forexService.fetchPositions().fold(
-                onSuccess = { forexState = UiState.Success(it) },
-                onFailure = { forexState = UiState.Error(it.message ?: "Failed") }
+            tradeHistoryService.fetchTradeHistory(50).fold(
+                onSuccess = { tradeHistoryState = UiState.Success(it) },
+                onFailure = { tradeHistoryState = UiState.Error(it.message ?: "Failed") }
             )
             delay(30_000)
         }
@@ -80,9 +80,9 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // ── Forex PnL Banner (top) ──
-            ForexPnlBanner(forexState) {
-                onNavigate(Screen.Forex)
+            // ── Daily PnL Banner (top) ──
+            DailyPnlBanner(tradeHistoryState) {
+                onNavigate(Screen.Dashboard)
             }
 
             Spacer(Modifier.height(16.dp))
@@ -281,9 +281,9 @@ private fun DeepSeekBanner(state: UiState<DeepSeekData>) {
     }
 }
 
-// ── Forex PnL Banner ──
+// ── Daily PnL Banner ──
 @Composable
-private fun ForexPnlBanner(state: UiState<ForexPositionsResponse>, onClick: () -> Unit) {
+private fun DailyPnlBanner(state: UiState<TradeHistoryResponse>, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -299,14 +299,14 @@ private fun ForexPnlBanner(state: UiState<ForexPositionsResponse>, onClick: () -
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
-                Icons.Default.CurrencyExchange,
+                Icons.Default.TrendingUp,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.size(28.dp)
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Forex PnL",
+                "Daily PnL",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
@@ -324,12 +324,20 @@ private fun ForexPnlBanner(state: UiState<ForexPositionsResponse>, onClick: () -
                     )
                 },
                 onSuccess = { data ->
-                    val totalPnl = data.total_pnl
-                    val pnlColor = if (totalPnl >= 0) Color(0xFF4CAF50) else Color(0xFFEF5350)
-                    val pnlSign = if (totalPnl >= 0) "+" else ""
+                    // Filter trades for today (handle both DD/MM/YY and ISO date formats)
+                    val todayDdMmYy = todayDateString()
+                    val todayIso = todayIsoDateString()
+                    val todayTrades = data.trades.filter {
+                        it.formattedDate == todayDdMmYy || it.formattedDate == todayIso
+                    }
+                    val dailyPnl = todayTrades.sumOf { it.pnl_usd }
+                    val pnlColor = if (dailyPnl >= 0) Color(0xFF4CAF50) else Color(0xFFEF5350)
+                    val pnlSign = if (dailyPnl >= 0) "+" else ""
+                    val cryptoCount = todayTrades.count { it.isCrypto }
+                    val forexCount = todayTrades.count { it.isForex }
 
                     Text(
-                        "$pnlSign$${"%,.2f".format(totalPnl)}",
+                        "$pnlSign$${"%,.2f".format(dailyPnl)}",
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
                         color = pnlColor,
@@ -337,7 +345,7 @@ private fun ForexPnlBanner(state: UiState<ForexPositionsResponse>, onClick: () -
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "${data.count} open positions",
+                        "${todayTrades.size} trades today  •  $cryptoCount crypto / $forexCount forex",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center
@@ -355,6 +363,21 @@ private fun ForexPnlBanner(state: UiState<ForexPositionsResponse>, onClick: () -
             )
         }
     }
+}
+
+// ── Today's date in DD/MM/YY format (matches IG forex date format) ──
+private fun todayDateString(): String {
+    val now = kotlinx.datetime.Clock.System.now()
+    val instant = now
+    val dateTime = instant.toString().substringBefore("T")
+    val parts = dateTime.split("-")
+    return "${parts[2]}/${parts[1]}/${parts[0].takeLast(2)}"
+}
+
+// ── Today's date in ISO YYYY-MM-DD format (matches Alpaca crypto date format) ──
+private fun todayIsoDateString(): String {
+    val now = kotlinx.datetime.Clock.System.now()
+    return now.toString().substringBefore("T")
 }
 
 // ── Home Tile ──

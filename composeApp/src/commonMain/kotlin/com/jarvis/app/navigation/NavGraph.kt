@@ -20,7 +20,6 @@ sealed class Screen(val route: String) {
         fun createRoute(expenseId: String) = "day_010_expense_detail/$expenseId"
     }
     data object ExpenseList : Screen("day_010_expense_list")
-    data object Flashcard : Screen("day_011_flashcard")
     data object Timer : Screen("day_012_timer")
     data object Habit : Screen("day_014_habit")
     data object Notes : Screen("day_015_notes")
