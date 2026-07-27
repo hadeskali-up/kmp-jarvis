@@ -800,6 +800,8 @@ private fun TradeHistoryRow(trade: TradeRecord) {
     val sourceColor = if (trade.isForex) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.tertiary
     val sourceIcon = if (trade.isForex) Icons.Default.CurrencyExchange else Icons.Default.CurrencyBitcoin
     val sourceLabel = if (trade.isForex) "FX" else "CR"
+    val statusColor = if (trade.isOpen) Color(0xFF2196F3) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    val dateLabel = if (trade.isOpen) "live" else trade.formattedDate
 
     Row(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -824,7 +826,7 @@ private fun TradeHistoryRow(trade: TradeRecord) {
                     fontSize = 14.sp
                 )
                 Text(
-                    "${trade.side} • ${trade.formattedDate}",
+                    "${trade.side} • $dateLabel",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -840,7 +842,7 @@ private fun TradeHistoryRow(trade: TradeRecord) {
             Text(
                 trade.status,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                color = statusColor
             )
         }
     }

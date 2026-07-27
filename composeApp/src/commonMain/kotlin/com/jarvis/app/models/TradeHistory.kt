@@ -30,6 +30,7 @@ data class TradeRecord(
     }
     val isForex: Boolean get() = source == "forex"
     val isCrypto: Boolean get() = source == "crypto"
+    val isOpen: Boolean get() = status == "open"
     val formattedDate: String get() {
         // Handle both ISO format and DD/MM/YY format
         return if (date.contains("T")) {
