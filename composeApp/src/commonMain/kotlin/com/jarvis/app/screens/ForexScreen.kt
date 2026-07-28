@@ -471,7 +471,7 @@ private fun MT5PositionCard(pos: MT5Position) {
                                 modifier = Modifier.width(24.dp)
                             )
                             LinearProgressIndicator(
-                                progress = { (pos.tp_progress / 100f).coerceIn(0f, 1f) },
+                                progress = { (pos.tp_progress / 100.0).toFloat().coerceIn(0f, 1f) },
                                 modifier = Modifier.weight(1f).height(6.dp),
                                 color = Color(0xFF4CAF50),
                                 trackColor = MaterialTheme.colorScheme.surface
@@ -497,7 +497,7 @@ private fun MT5PositionCard(pos: MT5Position) {
                                 modifier = Modifier.width(24.dp)
                             )
                             LinearProgressIndicator(
-                                progress = { (pos.sl_progress / 100f).coerceIn(0f, 1f) },
+                                progress = { (pos.sl_progress / 100.0).toFloat().coerceIn(0f, 1f) },
                                 modifier = Modifier.weight(1f).height(6.dp),
                                 color = Color(0xFFEF5350),
                                 trackColor = MaterialTheme.colorScheme.surface
