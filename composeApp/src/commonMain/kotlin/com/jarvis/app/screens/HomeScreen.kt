@@ -16,12 +16,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jarvis.app.core.UiState
 import com.jarvis.app.core.fold
+import com.jarvis.app.models.AiUsageData
 import com.jarvis.app.models.CryptoPositionsResponse
-import com.jarvis.app.models.DeepSeekData
 import com.jarvis.app.models.TradeHistoryResponse
 import com.jarvis.app.navigation.Screen
+import com.jarvis.app.services.AiUsageService
 import com.jarvis.app.services.CryptoService
-import com.jarvis.app.services.DashboardService
 import com.jarvis.app.services.TradeHistoryService
 import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
@@ -29,22 +29,25 @@ import org.koin.compose.koinInject
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(onNavigate: (Screen) -> Unit) {
-    var creditState by remember { mutableStateOf<UiState<DeepSeekData>>(UiState.Loading) }
+    var creditState by remember { mutableStateOf<UiState<AiUsageData>>(UiState.Loading) }
     var cryptoState by remember { mutableStateOf<UiState<CryptoPositionsResponse>>(UiState.Loading) }
     var tradeHistoryState by remember { mutableStateOf<UiState<TradeHistoryResponse>>(UiState.Loading) }
-    val service: DashboardService = koinInject()
+    val aiUsageService: AiUsageService = koinInject()
     val cryptoService: CryptoService = koinInject()
     val tradeHistoryService: TradeHistoryService = koinInject()
 
+    // Auto-refresh AI Router credit balance every 60s
     LaunchedEffect(Unit) {
-        service.fetchSnapshot().fold(
-            onSuccess = {
-                creditState = it.deepseek?.let { ds -> UiState.Success(ds) } ?: UiState.Error("No data")
-            },
-            onFailure = {
-                creditState = UiState.Error(it.message ?: "Failed")
-            }
-        )
+        while (true) {
+            aiUsageService.fetchUsage().fold(
+                onSuccess = {
+                    creditState = if (it.ok) UiState.Success(it)
+                    else UiState.Error(it.error.ifEmpty { "No data" })
+                },
+                onFailure = { creditState = UiState.Error(it.message ?: "Failed") }
+            )
+            delay(60_000)
+        }
     }
 
     // Auto-refresh crypto positions every 30s
@@ -94,8 +97,8 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
 
             Spacer(Modifier.height(16.dp))
 
-            // ── DeepSeek Credit Banner ──
-            DeepSeekBanner(creditState)
+            // ── AI Router Credit Banner ──
+            AiCreditBanner(creditState)
 
             Spacer(Modifier.height(32.dp))
 
@@ -200,9 +203,9 @@ private fun CryptoPnlBanner(state: UiState<CryptoPositionsResponse>, onClick: ()
     }
 }
 
-// ── DeepSeek Credit Banner (UiState-driven) ──
+// ── AI Router Credit Banner (UiState-driven) ──
 @Composable
-private fun DeepSeekBanner(state: UiState<DeepSeekData>) {
+private fun AiCreditBanner(state: UiState<AiUsageData>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -217,14 +220,14 @@ private fun DeepSeekBanner(state: UiState<DeepSeekData>) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
-                Icons.Default.Star,
+                Icons.Default.AccountBalanceWallet,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(28.dp)
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "DeepSeek Credits",
+                "AI Router Credits",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
@@ -235,44 +238,84 @@ private fun DeepSeekBanner(state: UiState<DeepSeekData>) {
                 onLoading = {
                     Text(
                         "Loading...",
-                        fontSize = 28.sp,
+                        fontSize = 32.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
                         textAlign = TextAlign.Center
                     )
                 },
                 onSuccess = { data ->
+                    // Big balance
+                    val lowBalance = data.balance < 15.0
                     Text(
-                        data.display.ifEmpty { "${data.total_balance} ${data.currency}" },
-                        fontSize = 28.sp,
+                        "$${"%,.2f".format(data.balance)}",
+                        fontSize = 34.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        color = if (lowBalance) Color(0xFFEF5350)
+                                else MaterialTheme.colorScheme.onPrimaryContainer,
                         textAlign = TextAlign.Center
                     )
-                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "of $${"%,.2f".format(data.budget)} budget left",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(10.dp))
+
+                    // Budget progress bar
+                    val pct = (data.used_pct / 100.0).coerceIn(0.0, 1.0)
+                    LinearProgressIndicator(
+                        progress = { pct.toFloat() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp),
+                        color = if (lowBalance) Color(0xFFEF5350) else MaterialTheme.colorScheme.onPrimaryContainer,
+                        trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f)
+                    )
+                    Spacer(Modifier.height(8.dp))
+
+                    // Spent + 24h usage row
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(
-                            Icons.Default.TrendingDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
-                        )
                         Text(
-                            "Today: \$${data.today_used}",
-                            style = MaterialTheme.typography.bodySmall,
+                            "Spent $${"%,.2f".format(data.spent)} (${"%.0f".format(data.used_pct)}%)",
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                         )
+                        if (data.usage_24h_spent > 0.0) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.TrendingDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(13.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                                )
+                                Spacer(Modifier.width(2.dp))
+                                Text(
+                                    "24h $${"%,.2f".format(data.usage_24h_spent)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
                     }
                 },
                 onError = { msg ->
                     Text(
                         "—",
-                        fontSize = 28.sp,
+                        fontSize = 34.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f),
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        msg.take(40),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
                         textAlign = TextAlign.Center
                     )
                 }
