@@ -590,17 +590,38 @@ private fun MT5HistorySection(state: UiState<MT5HistoryResponse>) {
                         }
                     }
 
-                    // Deal rows
-                    data.deals.take(30).forEach { deal -> MT5DealRow(deal) }
+                    // ── Scrollable deal list (up to 100 deals) ──
+                    val displayDeals = data.deals.take(100)
+                    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
-                    if (data.deals.size > 30) {
-                        Text(
-                            "+${data.deals.size - 30} more deals...",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 480.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
                         )
+                    ) {
+                        androidx.compose.foundation.lazy.LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(vertical = 4.dp)
+                        ) {
+                            items(displayDeals) { deal -> MT5DealRow(deal) }
+                            if (data.deals.size > 100) {
+                                item {
+                                    Text(
+                                        "+${data.deals.size - 100} more deals not shown",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(8.dp),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             },
@@ -625,41 +646,96 @@ private fun MT5MiniStat(label: String, value: String, color: Color = MaterialThe
 
 @Composable
 private fun MT5DealRow(deal: MT5Deal) {
-    val pnlColor = if (deal.profit > 0) Color(0xFF4CAF50) else if (deal.profit < 0) Color(0xFFEF5350) else MaterialTheme.colorScheme.onSurfaceVariant
+    // ── Color coding: TP (profit) = green, SL (loss) = red, Balance = gray ──
+    val isWin = deal.profit > 0
+    val isLoss = deal.profit < 0
+    val isNeutral = deal.profit == 0.0 || deal.isBalance
+
+    val pnlColor = when {
+        deal.isBalance -> MaterialTheme.colorScheme.onSurfaceVariant
+        isWin -> Color(0xFF4CAF50)
+        isLoss -> Color(0xFFEF5350)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     val pnlSign = if (deal.profit >= 0) "+" else ""
-    val sourceColor = if (deal.isBalance) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary
+
+    // ── Status badge: TP / SL / BAL / OUT ──
+    val statusLabel = when {
+        deal.isBalance -> "BAL"
+        isWin -> "TP"
+        isLoss -> "SL"
+        else -> "OUT"
+    }
+    val statusColor = when {
+        deal.isBalance -> MaterialTheme.colorScheme.onSurfaceVariant
+        isWin -> Color(0xFF4CAF50)
+        isLoss -> Color(0xFFEF5350)
+        else -> MaterialTheme.colorScheme.primary
+    }
+
     val sourceIcon = if (deal.isBalance) Icons.Default.AccountBalanceWallet else Icons.Default.CurrencyExchange
-    val sourceLabel = if (deal.isBalance) "BAL" else if (deal.isEntry) "IN" else "OUT"
+
+    // ── Left accent bar color ──
+    val accentColor = when {
+        deal.isBalance -> MaterialTheme.colorScheme.outlineVariant
+        isWin -> Color(0xFF4CAF50)
+        isLoss -> Color(0xFFEF5350)
+        else -> MaterialTheme.colorScheme.outline
+    }
 
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f)
-        ) {
-            Icon(
-                sourceIcon,
-                contentDescription = null,
-                tint = sourceColor,
-                modifier = Modifier.size(16.dp)
+        // ── Color accent bar ──
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(36.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(accentColor)
+        )
+
+        // ── Icon ──
+        Icon(
+            sourceIcon,
+            contentDescription = null,
+            tint = accentColor,
+            modifier = Modifier.size(18.dp)
+        )
+
+        // ── Symbol + time ──
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                if (deal.isBalance) "Balance Operation" else deal.symbol,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
             )
-            Column {
-                Text(
-                    if (deal.isBalance) "Balance" else deal.symbol,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp
-                )
-                Text(
-                    "${deal.type} • ${deal.formattedTime}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                "${deal.type} • ${"%,.2f".format(deal.volume)} lots • ${deal.formattedTime}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
+
+        // ── Status badge ──
+        Surface(
+            shape = RoundedCornerShape(4.dp),
+            color = statusColor.copy(alpha = 0.15f)
+        ) {
+            Text(
+                statusLabel,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = statusColor,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+        }
+
+        // ── PnL ──
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 "$pnlSign$${"%,.2f".format(deal.profit)}",
@@ -667,11 +743,13 @@ private fun MT5DealRow(deal: MT5Deal) {
                 fontSize = 14.sp,
                 color = pnlColor
             )
-            Text(
-                "$sourceLabel • ${"%,.2f".format(deal.volume)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (deal.comment.isNotEmpty() && !deal.isBalance) {
+                Text(
+                    deal.comment.take(15),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
