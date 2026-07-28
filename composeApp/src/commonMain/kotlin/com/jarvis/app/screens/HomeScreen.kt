@@ -98,14 +98,7 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // ── Daily PnL Banner (top) ──
-            DailyPnlBanner(tradeHistoryState) {
-                onNavigate(Screen.Dashboard)
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // ── MT5 Forex Banner ──
+            // ── MT5 Forex Banner (top) ──
             MT5ForexBanner(mt5State) {
                 onNavigate(Screen.Forex)
             }
@@ -116,11 +109,6 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
             CryptoPnlBanner(cryptoState) {
                 onNavigate(Screen.Crypto)
             }
-
-            Spacer(Modifier.height(16.dp))
-
-            // ── AI Router Credit Banner ──
-            AiCreditBanner(creditState)
 
             Spacer(Modifier.height(32.dp))
 
