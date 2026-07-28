@@ -18,10 +18,12 @@ import com.jarvis.app.core.UiState
 import com.jarvis.app.core.fold
 import com.jarvis.app.models.AiUsageData
 import com.jarvis.app.models.CryptoPositionsResponse
+import com.jarvis.app.models.MT5PositionsResponse
 import com.jarvis.app.models.TradeHistoryResponse
 import com.jarvis.app.navigation.Screen
 import com.jarvis.app.services.AiUsageService
 import com.jarvis.app.services.CryptoService
+import com.jarvis.app.services.ForexService
 import com.jarvis.app.services.TradeHistoryService
 import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
@@ -31,9 +33,11 @@ import org.koin.compose.koinInject
 fun HomeScreen(onNavigate: (Screen) -> Unit) {
     var creditState by remember { mutableStateOf<UiState<AiUsageData>>(UiState.Loading) }
     var cryptoState by remember { mutableStateOf<UiState<CryptoPositionsResponse>>(UiState.Loading) }
+    var mt5State by remember { mutableStateOf<UiState<MT5PositionsResponse>>(UiState.Loading) }
     var tradeHistoryState by remember { mutableStateOf<UiState<TradeHistoryResponse>>(UiState.Loading) }
     val aiUsageService: AiUsageService = koinInject()
     val cryptoService: CryptoService = koinInject()
+    val forexService: ForexService = koinInject()
     val tradeHistoryService: TradeHistoryService = koinInject()
 
     // Auto-refresh AI Router credit balance every 60s
@@ -56,6 +60,17 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
             cryptoService.fetchPositions().fold(
                 onSuccess = { cryptoState = UiState.Success(it) },
                 onFailure = { cryptoState = UiState.Error(it.message ?: "Failed") }
+            )
+            delay(30_000)
+        }
+    }
+
+    // Auto-refresh MT5 positions every 30s
+    LaunchedEffect(Unit) {
+        while (true) {
+            forexService.fetchMT5Positions().fold(
+                onSuccess = { mt5State = UiState.Success(it) },
+                onFailure = { mt5State = UiState.Error(it.message ?: "No MT5 data") }
             )
             delay(30_000)
         }
@@ -90,6 +105,13 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
 
             Spacer(Modifier.height(16.dp))
 
+            // ── MT5 Forex Banner ──
+            MT5ForexBanner(mt5State) {
+                onNavigate(Screen.Forex)
+            }
+
+            Spacer(Modifier.height(16.dp))
+
             // ── Crypto PnL Banner ──
             CryptoPnlBanner(cryptoState) {
                 onNavigate(Screen.Crypto)
@@ -120,6 +142,90 @@ fun HomeScreen(onNavigate: (Screen) -> Unit) {
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+    }
+}
+
+// ── MT5 Forex Banner ──
+@Composable
+private fun MT5ForexBanner(state: UiState<MT5PositionsResponse>, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                Icons.Default.CurrencyExchange,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "MT5 Forex",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(4.dp))
+
+            state.fold(
+                onLoading = {
+                    Text(
+                        "Loading...",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                onSuccess = { data ->
+                    val pnl = data.total_pnl
+                    val balance = data.account.balance
+                    val pnlColor = if (pnl >= 0) Color(0xFF4CAF50) else Color(0xFFEF5350)
+                    val pnlSign = if (pnl >= 0) "+" else ""
+
+                    Text(
+                        "$pnlSign$${"%,.2f".format(pnl)}",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = pnlColor,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "$${"%,.2f".format(balance)} balance  •  ${data.count} open  •  ${data.account.server.ifEmpty { "MT5" }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center
+                    )
+                },
+                onError = { msg ->
+                    Text(
+                        "—",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.3f),
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "Waiting for MT5",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            )
         }
     }
 }

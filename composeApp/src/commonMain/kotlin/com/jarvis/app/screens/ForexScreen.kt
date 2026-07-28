@@ -19,10 +19,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jarvis.app.core.UiState
 import com.jarvis.app.core.fold
-import com.jarvis.app.models.ForexAlert
-import com.jarvis.app.models.ForexAlertsResponse
-import com.jarvis.app.models.ForexPosition
-import com.jarvis.app.models.ForexPositionsResponse
+import com.jarvis.app.models.MT5Deal
+import com.jarvis.app.models.MT5HistoryResponse
+import com.jarvis.app.models.MT5Position
+import com.jarvis.app.models.MT5PositionsResponse
+import com.jarvis.app.models.MT5StatusResponse
 import com.jarvis.app.services.ForexService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -32,34 +33,45 @@ import org.koin.compose.koinInject
 @Composable
 fun ForexScreen(onBack: () -> Unit) {
     val service: ForexService = koinInject()
-    var state by remember { mutableStateOf<UiState<ForexPositionsResponse>>(UiState.Loading) }
-    var alertsState by remember { mutableStateOf<UiState<ForexAlertsResponse>>(UiState.Loading) }
+    var state by remember { mutableStateOf<UiState<MT5PositionsResponse>>(UiState.Loading) }
+    var historyState by remember { mutableStateOf<UiState<MT5HistoryResponse>>(UiState.Loading) }
+    var statusState by remember { mutableStateOf<UiState<MT5StatusResponse>>(UiState.Loading) }
     var autoRefresh by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
     fun loadData() {
         state = UiState.Loading
+        historyState = UiState.Loading
+        statusState = UiState.Loading
         scope.launch {
-            service.fetchPositions().fold(
+            service.fetchMT5Positions().fold(
                 onSuccess = { state = UiState.Success(it) },
-                onFailure = { state = UiState.Error(it.message ?: "Failed to fetch positions") }
+                onFailure = { state = UiState.Error(it.message ?: "No MT5 data yet") }
             )
-            service.fetchAlerts().fold(
-                onSuccess = { alertsState = UiState.Success(it) },
-                onFailure = { alertsState = UiState.Error(it.message ?: "Failed to fetch alerts") }
+            service.fetchMT5History(50).fold(
+                onSuccess = { historyState = UiState.Success(it) },
+                onFailure = { historyState = UiState.Error(it.message ?: "No history yet") }
+            )
+            service.fetchMT5Status().fold(
+                onSuccess = { statusState = UiState.Success(it) },
+                onFailure = { statusState = UiState.Error(it.message ?: "Status unavailable") }
             )
         }
     }
 
     LaunchedEffect(Unit) {
         while (autoRefresh) {
-            service.fetchPositions().fold(
+            service.fetchMT5Positions().fold(
                 onSuccess = { state = UiState.Success(it) },
-                onFailure = { state = UiState.Error(it.message ?: "Failed") }
+                onFailure = { state = UiState.Error(it.message ?: "No MT5 data") }
             )
-            service.fetchAlerts().fold(
-                onSuccess = { alertsState = UiState.Success(it) },
-                onFailure = { alertsState = UiState.Error(it.message ?: "Failed to fetch alerts") }
+            service.fetchMT5History(50).fold(
+                onSuccess = { historyState = UiState.Success(it) },
+                onFailure = { historyState = UiState.Error(it.message ?: "No history") }
+            )
+            service.fetchMT5Status().fold(
+                onSuccess = { statusState = UiState.Success(it) },
+                onFailure = { statusState = UiState.Error(it.message ?: "Status error") }
             )
             delay(30_000)
         }
@@ -68,7 +80,7 @@ fun ForexScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Forex Positions", fontWeight = FontWeight.Bold) },
+                title = { Text("MT5 Positions", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, "Back")
@@ -100,14 +112,15 @@ fun ForexScreen(onBack: () -> Unit) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.height(12.dp))
-                        Text("Loading positions...", style = MaterialTheme.typography.bodyMedium)
+                        Text("Loading MT5 data...", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             },
             onSuccess = { data ->
                 ForexContent(
                     data = data,
-                    alertsState = alertsState,
+                    historyState = historyState,
+                    statusState = statusState,
                     autoRefresh = autoRefresh,
                     modifier = Modifier.padding(padding)
                 )
@@ -125,7 +138,7 @@ fun ForexScreen(onBack: () -> Unit) {
                             tint = MaterialTheme.colorScheme.error
                         )
                         Spacer(Modifier.height(12.dp))
-                        Text("Connection Error", fontWeight = FontWeight.Bold)
+                        Text("No MT5 Data", fontWeight = FontWeight.Bold)
                         Text(
                             msg,
                             style = MaterialTheme.typography.bodySmall,
@@ -142,22 +155,19 @@ fun ForexScreen(onBack: () -> Unit) {
 
 @Composable
 private fun ForexContent(
-    data: ForexPositionsResponse,
-    alertsState: UiState<ForexAlertsResponse>,
+    data: MT5PositionsResponse,
+    historyState: UiState<MT5HistoryResponse>,
+    statusState: UiState<MT5StatusResponse>,
     autoRefresh: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize()) {
-        // ── Summary header ──
-        val totalPnl = data.total_pnl
-        val winners = data.positions.count { it.isProfitable }
-        val losers = data.positions.count { !it.isProfitable }
-
-        ForexSummaryBanner(
-            totalPnl = totalPnl,
+        // ── Account banner (TOP — summary first) ──
+        MT5AccountBanner(
+            account = data.account,
             openCount = data.count,
-            winners = winners,
-            losers = losers,
+            totalPnl = data.total_pnl,
+            statusState = statusState,
             autoRefresh = autoRefresh
         )
 
@@ -166,6 +176,7 @@ private fun ForexContent(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // ── Open Positions ──
             if (data.positions.isEmpty()) {
                 item {
                     Column(
@@ -180,15 +191,23 @@ private fun ForexContent(
                         )
                         Spacer(Modifier.height(16.dp))
                         Text("No open positions", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "MT5 demo account is empty",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             } else {
-                items(data.positions) { pos -> ForexPositionCard(pos) }
+                items(data.positions) { pos -> MT5PositionCard(pos) }
             }
-            item { ForexAlertsSection(alertsState) }
+
+            // ─── Deal History Section ───
+            item { MT5HistorySection(historyState) }
+
             item {
                 Text(
-                    "ATR-based SL/TP  |  IG native orders",
+                    "MT5 Demo  |  FXTM  |  Leverage 1:${data.account.leverage}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth(),
@@ -199,60 +218,18 @@ private fun ForexContent(
     }
 }
 
+// ── MT5 Account Banner ──
 @Composable
-private fun ForexAlertsSection(state: UiState<ForexAlertsResponse>) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Monitor Alerts", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        state.fold(
-            onLoading = { LinearProgressIndicator(Modifier.fillMaxWidth()) },
-            onSuccess = { data ->
-                if (data.alerts.isEmpty()) {
-                    Text("No monitor alerts yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    data.alerts.take(20).forEach { alert -> ForexAlertRow(alert) }
-                }
-            },
-            onError = { message -> Text(message, color = MaterialTheme.colorScheme.error) }
-        )
-    }
-}
-
-@Composable
-private fun ForexAlertRow(alert: ForexAlert) {
-    val color = when (alert.event) {
-        "opened" -> Color(0xFF4CAF50)
-        "closed" -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.error
-    }
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth().padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Icon(Icons.Default.Notifications, null, tint = color)
-            Column(Modifier.weight(1f)) {
-                Text(alert.title, fontWeight = FontWeight.Bold)
-                Text(alert.message, style = MaterialTheme.typography.bodySmall)
-                Text(
-                    alert.timestamp.replace("T", " ").take(19) + " UTC",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ForexSummaryBanner(
-    totalPnl: Double,
+private fun MT5AccountBanner(
+    account: com.jarvis.app.models.MT5Account,
     openCount: Int,
-    winners: Int,
-    losers: Int,
+    totalPnl: Double,
+    statusState: UiState<MT5StatusResponse>,
     autoRefresh: Boolean
 ) {
     val pnlColor = if (totalPnl >= 0) Color(0xFF4CAF50) else Color(0xFFEF5350)
     val pnlSign = if (totalPnl >= 0) "+" else ""
+    val isFresh = statusState is UiState.Success && statusState.data.fresh
 
     Card(
         modifier = Modifier
@@ -267,27 +244,82 @@ private fun ForexSummaryBanner(
             modifier = Modifier.fillMaxWidth().padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                "Forex PnL (IG Demo)",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "$pnlSign$${"%,.2f".format(totalPnl)}",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                color = pnlColor
-            )
+            // ── Server + Connection status ──
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    account.server.ifEmpty { "MT5 Demo" },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(if (isFresh) Color(0xFF4CAF50) else Color(0xFFEF5350))
+                    )
+                    Text(
+                        if (isFresh) "Live" else "Stale",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
             Spacer(Modifier.height(8.dp))
+
+            // ── Account holder name ──
+            if (account.name.isNotEmpty()) {
+                Text(
+                    account.name,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
+            }
+
+            // ── Balance (BIG) ──
+            Text(
+                "$${"%,.2f".format(account.balance)}",
+                fontSize = 36.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Text(
+                "${account.currency}  •  Login: ${account.login}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // ── Equity / Margin / PnL row ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                ForexStatChip("Open", "$openCount", MaterialTheme.colorScheme.onSecondaryContainer)
-                ForexStatChip("Winners", "$winners", Color(0xFF4CAF50))
-                ForexStatChip("Losers", "$losers", Color(0xFFEF5350))
+                MT5StatChip("Equity", "$${"%,.2f".format(account.equity)}", MaterialTheme.colorScheme.onSecondaryContainer)
+                MT5StatChip("Margin", "$${"%,.2f".format(account.margin)}", MaterialTheme.colorScheme.onSecondaryContainer)
+                MT5StatChip("Open PnL", "$pnlSign${"%,.2f".format(totalPnl)}", pnlColor)
             }
+
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                MT5StatChip("Positions", "$openCount", MaterialTheme.colorScheme.onSecondaryContainer)
+                MT5StatChip("Free Margin", "$${"%,.2f".format(account.margin_free)}", MaterialTheme.colorScheme.onSecondaryContainer)
+                MT5StatChip("Leverage", "1:${account.leverage}", MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+
             if (autoRefresh) {
                 Spacer(Modifier.height(8.dp))
                 Row(
@@ -312,11 +344,11 @@ private fun ForexSummaryBanner(
 }
 
 @Composable
-private fun ForexStatChip(label: String, value: String, color: Color) {
+private fun MT5StatChip(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             value,
-            fontSize = 16.sp,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             color = color
         )
@@ -328,10 +360,11 @@ private fun ForexStatChip(label: String, value: String, color: Color) {
     }
 }
 
+// ── MT5 Position Card ──
 @Composable
-private fun ForexPositionCard(pos: ForexPosition) {
+private fun MT5PositionCard(pos: MT5Position) {
     val pnlColor = if (pos.isProfitable) Color(0xFF4CAF50) else Color(0xFFEF5350)
-    val pnlSign = if (pos.pnl_usd >= 0) "+" else ""
+    val pnlSign = if (pos.profit >= 0) "+" else ""
     val dirColor = if (pos.isLong) Color(0xFF4CAF50) else Color(0xFFEF5350)
     val dirLabel = if (pos.isLong) "LONG" else "SHORT"
 
@@ -348,7 +381,7 @@ private fun ForexPositionCard(pos: ForexPosition) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // ── Pair + Direction + PnL ──
+            // ── Symbol + Direction + PnL ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -365,7 +398,7 @@ private fun ForexPositionCard(pos: ForexPosition) {
                         modifier = Modifier.size(24.dp)
                     )
                     Text(
-                        pos.pair,
+                        pos.symbol,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -384,7 +417,7 @@ private fun ForexPositionCard(pos: ForexPosition) {
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        "$pnlSign$${"%,.2f".format(pos.pnl_usd)}",
+                        "$pnlSign$${"%,.2f".format(pos.profit)}",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = pnlColor
@@ -402,31 +435,103 @@ private fun ForexPositionCard(pos: ForexPosition) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                ForexPriceCell("Entry", "${"%,.5f".format(pos.level)}", Modifier.weight(1f))
-                ForexPriceCell("Bid", "${"%,.5f".format(pos.bid)}", Modifier.weight(1f))
-                ForexPriceCell("Offer", "${"%,.5f".format(pos.offer)}", Modifier.weight(1f))
-            }
-
-            // ── Size + Change ──
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ForexPriceCell("Size", "${"%,.2f".format(pos.size)}", Modifier.weight(1f))
-                ForexPriceCell("Change", "${"%,.2f".format(pos.percentage_change)}%", Modifier.weight(1f))
+                MT5PriceCell("Entry", "${"%,.5f".format(pos.price_open)}", Modifier.weight(1f))
+                MT5PriceCell("Current", "${"%,.5f".format(pos.price_current)}", Modifier.weight(1f))
+                MT5PriceCell("Volume", "${"%,.2f".format(pos.volume)}", Modifier.weight(1f))
             }
 
             // ── SL / TP levels ──
-            if (pos.stop > 0 || pos.limit > 0) {
+            if (pos.sl > 0 || pos.tp > 0) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (pos.stop > 0) {
-                        ForexPriceCell("SL", "${"%,.5f".format(pos.stop)}", Modifier.weight(1f), Color(0xFFEF5350))
+                    if (pos.sl > 0) {
+                        MT5PriceCell("SL", "${"%,.5f".format(pos.sl)}", Modifier.weight(1f), Color(0xFFEF5350))
                     }
-                    if (pos.limit > 0) {
-                        ForexPriceCell("TP", "${"%,.5f".format(pos.limit)}", Modifier.weight(1f), Color(0xFF4CAF50))
+                    if (pos.tp > 0) {
+                        MT5PriceCell("TP", "${"%,.5f".format(pos.tp)}", Modifier.weight(1f), Color(0xFF4CAF50))
+                    }
+                }
+            }
+
+            // ── TP/SL Progress bars ──
+            if (pos.tp_progress > 0 || pos.sl_progress > 0) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (pos.tp_progress > 0) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "TP",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF4CAF50),
+                                modifier = Modifier.width(24.dp)
+                            )
+                            LinearProgressIndicator(
+                                progress = { (pos.tp_progress / 100f).coerceIn(0f, 1f) },
+                                modifier = Modifier.weight(1f).height(6.dp),
+                                color = Color(0xFF4CAF50),
+                                trackColor = MaterialTheme.colorScheme.surface
+                            )
+                            Text(
+                                "${"%.0f".format(pos.tp_progress)}%",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF4CAF50),
+                                modifier = Modifier.width(36.dp)
+                            )
+                        }
+                    }
+                    if (pos.sl_progress > 0) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "SL",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFEF5350),
+                                modifier = Modifier.width(24.dp)
+                            )
+                            LinearProgressIndicator(
+                                progress = { (pos.sl_progress / 100f).coerceIn(0f, 1f) },
+                                modifier = Modifier.weight(1f).height(6.dp),
+                                color = Color(0xFFEF5350),
+                                trackColor = MaterialTheme.colorScheme.surface
+                            )
+                            Text(
+                                "${"%.0f".format(pos.sl_progress)}%",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFEF5350),
+                                modifier = Modifier.width(36.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ── Comment + Time ──
+            if (pos.comment.isNotEmpty() || pos.time.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    if (pos.comment.isNotEmpty()) {
+                        Text(
+                            "📝 ${pos.comment}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (pos.time.isNotEmpty()) {
+                        Text(
+                            pos.time.replace("T", " ").take(19),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -434,8 +539,145 @@ private fun ForexPositionCard(pos: ForexPosition) {
     }
 }
 
+// ── MT5 History Section ──
 @Composable
-private fun ForexPriceCell(
+private fun MT5HistorySection(state: UiState<MT5HistoryResponse>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Deal History (30 days)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+        state.fold(
+            onLoading = { LinearProgressIndicator(Modifier.fillMaxWidth()) },
+            onSuccess = { data ->
+                if (data.deals.isEmpty()) {
+                    Text(
+                        "No closed deals yet",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else {
+                    // Summary row
+                    val closedDeals = data.deals.filter { !it.isBalance }
+                    val winners = closedDeals.count { it.profit > 0 }
+                    val losers = closedDeals.count { it.profit < 0 }
+                    val totalPnl = data.total_pnl
+                    val pnlColor = if (totalPnl >= 0) Color(0xFF4CAF50) else Color(0xFFEF5350)
+                    val pnlSign = if (totalPnl >= 0) "+" else ""
+
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    "Total Realized PnL",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    "$pnlSign$${"%,.2f".format(totalPnl)}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp,
+                                    color = pnlColor
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                MT5MiniStat("Deals", "${data.count}")
+                                MT5MiniStat("W", "$winners", Color(0xFF4CAF50))
+                                MT5MiniStat("L", "$losers", Color(0xFFEF5350))
+                            }
+                        }
+                    }
+
+                    // Deal rows
+                    data.deals.take(30).forEach { deal -> MT5DealRow(deal) }
+
+                    if (data.deals.size > 30) {
+                        Text(
+                            "+${data.deals.size - 30} more deals...",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            },
+            onError = { message ->
+                Text(
+                    message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        )
+    }
+}
+
+@Composable
+private fun MT5MiniStat(label: String, value: String, color: Color = MaterialTheme.colorScheme.onSurface) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = color)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun MT5DealRow(deal: MT5Deal) {
+    val pnlColor = if (deal.profit > 0) Color(0xFF4CAF50) else if (deal.profit < 0) Color(0xFFEF5350) else MaterialTheme.colorScheme.onSurfaceVariant
+    val pnlSign = if (deal.profit >= 0) "+" else ""
+    val sourceColor = if (deal.isBalance) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary
+    val sourceIcon = if (deal.isBalance) Icons.Default.AccountBalanceWallet else Icons.Default.CurrencyExchange
+    val sourceLabel = if (deal.isBalance) "BAL" else if (deal.isEntry) "IN" else "OUT"
+
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(
+                sourceIcon,
+                contentDescription = null,
+                tint = sourceColor,
+                modifier = Modifier.size(16.dp)
+            )
+            Column {
+                Text(
+                    if (deal.isBalance) "Balance" else deal.symbol,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp
+                )
+                Text(
+                    "${deal.type} • ${deal.formattedTime}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                "$pnlSign$${"%,.2f".format(deal.profit)}",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = pnlColor
+            )
+            Text(
+                "$sourceLabel • ${"%,.2f".format(deal.volume)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun MT5PriceCell(
     label: String,
     value: String,
     modifier: Modifier = Modifier,

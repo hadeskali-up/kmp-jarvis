@@ -2,6 +2,9 @@ package com.jarvis.app.services
 
 import com.jarvis.app.models.ForexPositionsResponse
 import com.jarvis.app.models.ForexAlertsResponse
+import com.jarvis.app.models.MT5PositionsResponse
+import com.jarvis.app.models.MT5HistoryResponse
+import com.jarvis.app.models.MT5StatusResponse
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.*
@@ -27,6 +30,8 @@ class ForexService(
         }
     }
 
+    // ─── IG Forex (legacy) ──
+
     suspend fun fetchPositions(): Result<ForexPositionsResponse> {
         return try {
             val response: ForexPositionsResponse =
@@ -39,6 +44,20 @@ class ForexService(
 
     suspend fun fetchAlerts(limit: Int = 50): Result<ForexAlertsResponse> = runCatching {
         client.get("$baseUrl/api/forex-alerts?limit=$limit").body()
+    }
+
+    // ─── MT5 (Windows PC push) ──
+
+    suspend fun fetchMT5Positions(): Result<MT5PositionsResponse> = runCatching {
+        client.get("$baseUrl/api/mt5-positions").body()
+    }
+
+    suspend fun fetchMT5History(limit: Int = 50): Result<MT5HistoryResponse> = runCatching {
+        client.get("$baseUrl/api/mt5-history?limit=$limit").body()
+    }
+
+    suspend fun fetchMT5Status(): Result<MT5StatusResponse> = runCatching {
+        client.get("$baseUrl/api/mt5-status").body()
     }
 
     fun cleanup() {
