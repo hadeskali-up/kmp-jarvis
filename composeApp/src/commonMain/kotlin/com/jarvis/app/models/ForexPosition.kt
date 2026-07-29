@@ -62,7 +62,7 @@ data class MT5Account(
     val equity: Double = 0.0,
     val margin: Double = 0.0,
     val margin_free: Double = 0.0,
-    val margin_level: Double = 0.0,
+    val margin_level: Double? = null,  // Nullable when no open positions
     val profit: Double = 0.0,
     val currency: String = "USD",
     val server: String = "",
