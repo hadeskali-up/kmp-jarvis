@@ -23,8 +23,7 @@ import com.jarvis.app.core.ScreenState
 import com.jarvis.app.core.UiState
 import com.jarvis.app.core.fold
 import com.jarvis.app.models.*
-import com.jarvis.app.services.CryptoService
-import com.jarvis.app.services.TradeHistoryService
+import com.jarvis.app.services.ProviderBalanceService
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -33,41 +32,28 @@ import org.koin.compose.koinInject
 fun DashboardScreen(onBack: () -> Unit) {
     val viewModel: DashboardViewModel = koinInject()
     val uiState by viewModel.state.collectAsStateWithLifecycle()
-    val cryptoService: CryptoService = koinInject()
-    var cryptoState by remember { mutableStateOf<UiState<CryptoPositionsResponse>>(UiState.Loading) }
-    val tradeHistoryService: TradeHistoryService = koinInject()
-    var tradeHistoryState by remember { mutableStateOf<UiState<TradeHistoryResponse>>(UiState.Loading) }
+    val providerBalanceService: ProviderBalanceService = koinInject()
+    var providerBalancesState by remember { mutableStateOf<UiState<ProviderBalancesResponse>>(UiState.Loading) }
     val scope = rememberCoroutineScope()
 
-    // Fetch crypto positions alongside dashboard data
-    fun loadCrypto() {
+    fun loadProviderBalances() {
         scope.launch {
-            cryptoService.fetchPositions().fold(
-                onSuccess = { cryptoState = UiState.Success(it) },
-                onFailure = { cryptoState = UiState.Error(it.message ?: "Failed to fetch crypto") }
-            )
-        }
-    }
-
-    fun loadTradeHistory() {
-        scope.launch {
-            tradeHistoryService.fetchTradeHistory(50).fold(
-                onSuccess = { tradeHistoryState = UiState.Success(it) },
-                onFailure = { tradeHistoryState = UiState.Error(it.message ?: "Failed to fetch trades") }
+            providerBalanceService.fetchBalances().fold(
+                onSuccess = { providerBalancesState = UiState.Success(it) },
+                onFailure = { providerBalancesState = UiState.Error(it.message ?: "Failed to fetch provider balances") }
             )
         }
     }
 
     LaunchedEffect(Unit) {
-        loadCrypto()
-        loadTradeHistory()
+        loadProviderBalances()
     }
 
-    // Auto-refresh trade history every 60s to reflect today's trades
+    // Auto-refresh provider balances every 60s
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(60_000)
-            loadTradeHistory()
+            loadProviderBalances()
         }
     }
 
@@ -83,8 +69,7 @@ fun DashboardScreen(onBack: () -> Unit) {
                 actions = {
                     IconButton(onClick = {
                         viewModel.loadData()
-                        loadCrypto()
-                        loadTradeHistory()
+                        loadProviderBalances()
                     }) {
                         Icon(Icons.Default.Refresh, "Refresh")
                     }
@@ -115,18 +100,9 @@ fun DashboardScreen(onBack: () -> Unit) {
                     VpsOverviewCard(vps)
                 }
 
-                // ── DeepSeek Credits ──
-                data.deepseek?.let { ds ->
-                    SectionHeader("DeepSeek Credits", Icons.Default.CurrencyExchange)
-                    CreditCard(ds)
-                }
-
-                // ── Crypto Holdings ──
-                CryptoHoldingsSection(cryptoState)
-
-                // ── Trade History (consolidated crypto + forex) ──
-                TradeHistorySection(tradeHistoryState)
-
+                // ── Provider Balances ──
+                SectionHeader("Provider Balances", Icons.Default.CurrencyExchange)
+                ProviderBalancesSection(providerBalancesState)
 
                 // ── Gateway Status ──
                 data.gateway?.let { gw ->
@@ -158,12 +134,6 @@ fun DashboardScreen(onBack: () -> Unit) {
                     ActivityFeed(acts.take(10))
                 }
 
-                // ── Activity by Day ──
-                data.activity_by_day?.let { days ->
-                    SectionHeader("Activity by Day", Icons.Default.BarChart)
-                    DayActivityBars(days)
-                }
-
                 Spacer(Modifier.height(32.dp))
             }
         }
@@ -177,24 +147,6 @@ private fun SectionHeader(title: String, icon: androidx.compose.ui.graphics.vect
         Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, letterSpacing = 0.1.sp)
-    }
-}
-
-// ── DeepSeek Credit Card ──
-@Composable
-private fun CreditCard(ds: DeepSeekData) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            StatItem("Balance", ds.display.ifEmpty { "${ds.total_balance} ${ds.currency}" })
-            VerticalDivider(Modifier.height(40.dp))
-            StatItem("Used Today", "$${ds.today_used}")
-        }
     }
 }
 
@@ -440,54 +392,9 @@ private fun ActivityFeed(items: List<ActivityItem>) {
     }
 }
 
-// ── Day Activity Bars ──
+// ── Provider Balances Section ──
 @Composable
-private fun DayActivityBars(days: List<DayActivity>) {
-    val maxT = days.maxOfOrNull { it.t }?.coerceAtLeast(1) ?: 1
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            days.takeLast(14).forEach { day ->
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        day.day.takeLast(5),
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.width(48.dp)
-                    )
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(16.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Box(
-                            Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(fraction = (day.t.toFloat() / maxT).coerceIn(0f, 1f))
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "${day.t}",
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.width(24.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ── Crypto Holdings Section ──
-@Composable
-private fun CryptoHoldingsSection(state: UiState<CryptoPositionsResponse>) {
-    SectionHeader("Crypto Holdings", Icons.Default.CurrencyBitcoin)
-
+private fun ProviderBalancesSection(state: UiState<ProviderBalancesResponse>) {
     state.fold(
         onLoading = {
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -503,254 +410,17 @@ private fun CryptoHoldingsSection(state: UiState<CryptoPositionsResponse>) {
             }
         },
         onSuccess = { data ->
-            val totalValue = data.positions.sumOf { it.market_value }
-            val totalPnl = data.positions.sumOf { it.pnl_usd }
-            val totalCost = totalValue - totalPnl
-            val pnlPct = if (totalCost > 0) (totalPnl / totalCost) * 100 else 0.0
-            val pnlColor = if (totalPnl >= 0) Color(0xFF4CAF50) else Color(0xFFEF5350)
-            val pnlSign = if (totalPnl >= 0) "+" else ""
-            val winners = data.positions.count { it.isProfitable }
-            val losers = data.positions.count { !it.isProfitable }
-
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // Summary row
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                "Total Value",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                "$${"%,.2f".format(totalValue)}",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                "Total PnL",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                "$pnlSign$${"%,.2f".format(totalPnl)} ($pnlSign${"%.1f".format(pnlPct)}%)",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
-                                color = pnlColor
-                            )
-                        }
-                    }
-
-                    // W/L + open count badge
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CryptoMiniStat("Open", "${data.count}", Modifier.weight(1f))
-                        CryptoMiniStat("Winners", "$winners", Modifier.weight(1f), Color(0xFF4CAF50))
-                        CryptoMiniStat("Losers", "$losers", Modifier.weight(1f), Color(0xFFEF5350))
-                    }
-
-                    if (data.positions.isNotEmpty()) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-
-                        // Position list (max 5)
-                        data.positions.take(5).forEach { pos ->
-                            CryptoPositionRow(pos)
-                        }
-
-                        if (data.positions.size > 5) {
-                            Text(
-                                "+${data.positions.size - 5} more...",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                data.providers.forEach { provider ->
+                    ProviderBalanceCard(provider)
                 }
-            }
-        },
-        onError = { msg ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        Icons.Default.CloudOff,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(32.dp)
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text("Failed to load", fontWeight = FontWeight.Bold)
-                    Text(
-                        msg,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    )
-}
-
-@Composable
-private fun CryptoMiniStat(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.onSurface
-) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(value, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = color)
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun CryptoPositionRow(pos: CryptoPosition) {
-    val pnlColor = if (pos.isProfitable) Color(0xFF4CAF50) else Color(0xFFEF5350)
-    val pnlSign = if (pos.pnl_usd >= 0) "+" else ""
-
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.CurrencyBitcoin,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
-            )
-            Text(
-                pos.symbol,
-                fontWeight = FontWeight.Medium,
-                fontSize = 14.sp
-            )
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "$${"%,.2f".format(pos.market_value)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                "$pnlSign$${"%,.2f".format(pos.pnl_usd)}",
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = pnlColor
-            )
-            Text(
-                "$pnlSign${"%.1f".format(pos.pnl_pct)}%",
-                style = MaterialTheme.typography.labelSmall,
-                color = pnlColor
-            )
-        }
-    }
-}
-
-// ── Trade History Section ──
-@Composable
-private fun TradeHistorySection(state: UiState<TradeHistoryResponse>) {
-    SectionHeader("Trade History", Icons.Default.History)
-
-    state.fold(
-        onLoading = {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Box(
-                    Modifier.fillMaxWidth().padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-        },
-        onSuccess = { data ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Summary row
-                    val winners = data.trades.count { it.isProfitable }
-                    val losers = data.trades.count { it.pnl_usd < 0 }
-                    val totalPnl = data.total_pnl
-                    val pnlColor = if (totalPnl >= 0) Color(0xFF4CAF50) else Color(0xFFEF5350)
-                    val pnlSign = if (totalPnl >= 0) "+" else ""
-
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                "Total PnL",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                "$pnlSign$${"%,.2f".format(totalPnl)}",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
-                                color = pnlColor
-                            )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            CryptoMiniStat("Trades", "${data.count}", Modifier.weight(1f))
-                            CryptoMiniStat("W", "$winners", Modifier.weight(1f), Color(0xFF4CAF50))
-                            CryptoMiniStat("L", "$losers", Modifier.weight(1f), Color(0xFFEF5350))
-                        }
-                    }
-
-                    if (data.trades.isNotEmpty()) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-
-                        // Last 20 trades
-                        data.trades.take(20).forEach { trade ->
-                            TradeHistoryRow(trade)
-                        }
-
-                        if (data.trades.size > 20) {
-                            Text(
-                                "+${data.trades.size - 20} more...",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    } else {
+                if (data.providers.isEmpty()) {
+                    Card(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            "No trades yet",
+                            "No provider balance data yet",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
                             textAlign = TextAlign.Center
                         )
                     }
@@ -782,79 +452,94 @@ private fun TradeHistorySection(state: UiState<TradeHistoryResponse>) {
     )
 }
 
-@Composable
-private fun TradeHistoryRow(trade: TradeRecord) {
-    val pnlColor = if (trade.isProfitable) Color(0xFF4CAF50) else Color(0xFFEF5350)
-    val pnlSign = if (trade.pnl_usd >= 0) "+" else ""
-    val sourceColor = if (trade.isForex) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.tertiary
-    val sourceIcon = if (trade.isForex) Icons.Default.CurrencyExchange else Icons.Default.CurrencyBitcoin
-    val sourceLabel = if (trade.isForex) "FX" else "CR"
-    val statusColor = if (trade.isOpen) Color(0xFF2196F3) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-    val dateLabel = if (trade.isOpen) "live" else trade.formattedDate
+private fun formatBalance(value: Double, unit: String): String = when (unit) {
+    "USD" -> "$${"%,.2f".format(value)}"
+    "tokens", "credits" -> {
+        val millions = value / 1_000_000.0
+        if (millions >= 1.0) "${"%,.1f".format(millions)}M $unit" else "${"%,.0f".format(value)} $unit"
+    }
+    else -> "${"%,.2f".format(value)} $unit"
+}
 
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f)
-        ) {
-            Icon(
-                sourceIcon,
-                contentDescription = null,
-                tint = sourceColor,
-                modifier = Modifier.size(16.dp)
-            )
-            Column {
+@Composable
+private fun ProviderBalanceCard(provider: ProviderBalanceItem) {
+    val usagePct = provider.usage_percent
+    val barColor = when {
+        usagePct == null -> MaterialTheme.colorScheme.primary
+        usagePct > 80 -> MaterialTheme.colorScheme.error
+        usagePct > 60 -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val statusColor = if (provider.status == "active") {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.error
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Circle,
+                        null,
+                        tint = statusColor,
+                        modifier = Modifier.size(10.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        provider.provider.replaceFirstChar { it.uppercase() },
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 Text(
-                    trade.symbol,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp
+                    formatBalance(provider.balance, provider.balance_unit),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
                 )
+            }
+
+            if (usagePct != null) {
+                Column {
+                    LinearProgressIndicator(
+                        progress = { (usagePct / 100.0).toFloat().coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                        color = barColor,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(
+                            "${"%.1f".format(usagePct)}% used",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        provider.requests?.let {
+                            Text(
+                                "$it reqs",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            } else if (provider.requests != null) {
                 Text(
-                    "${trade.side} • $dateLabel",
+                    "${provider.requests} requests",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                "$pnlSign$${"%,.2f".format(trade.pnl_usd)}",
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = if (trade.pnl_usd != 0.0) pnlColor else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                trade.status,
-                style = MaterialTheme.typography.labelSmall,
-                color = statusColor
-            )
-        }
     }
 }
 
 // ── Helpers ──
-@Composable
-private fun StatItem(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
-        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
-    }
-}
-
-@Composable
-private fun VerticalDivider(modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .width(1.dp)
-            .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
-    )
-}
-
 private fun formatUptime(seconds: Long): String {
     val days = seconds / 86400
     val hours = (seconds % 86400) / 3600

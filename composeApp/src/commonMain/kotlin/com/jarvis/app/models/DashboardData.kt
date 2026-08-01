@@ -115,3 +115,28 @@ data class RootsysUsageData(
     val today_total: Long = 0,
     val daily: Map<String, Long> = emptyMap()
 )
+
+// ── Provider Balances (edge-windows-collector) ──
+@Serializable
+data class ProviderBalanceItem(
+    val provider: String = "",
+    val balance: Double = 0.0,
+    val balance_unit: String = "",
+    val used: Double? = null,
+    val total: Double? = null,
+    val usage_percent: Double? = null,
+    val requests: Int? = null,
+    val status: String = "",
+    val source_url: String = ""
+)
+
+@Serializable
+data class ProviderBalancesResponse(
+    val schema_version: Int = 1,
+    val collected_at: String = "",
+    val source: String = "",
+    val providers: List<ProviderBalanceItem> = emptyList(),
+    val received_at: String = "",
+    val fresh: Boolean = false,
+    val age_seconds: Long? = null
+)
